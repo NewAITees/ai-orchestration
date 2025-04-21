@@ -51,6 +51,18 @@ class BaseLLMManager(ABC):
     def update_last_used(self) -> None:
         """最終使用時刻を更新"""
         self.last_used = datetime.now()
+        
+    def get_completion(self, prompt: str) -> str:
+        """同期的にテキスト生成を行う（シンプルな利用向け）
+        
+        Args:
+            prompt: 入力プロンプト
+            
+        Returns:
+            生成されたテキスト
+        """
+        import asyncio
+        return asyncio.run(self.generate(prompt))
 
 class LLMManager(BaseLLMManager):
     """統合LLMマネージャー

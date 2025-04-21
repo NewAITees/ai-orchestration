@@ -1,3 +1,3 @@
-from .llm_manager import LLMManager
+from .llm_manager import LLMManager, BaseLLMManager
 
-__all__ = ["LLMManager"] 
+__all__ = ["LLMManager", "BaseLLMManager"] 
