@@ -110,6 +110,7 @@ class BaseEvaluatorAI(ABC):
 
 class DefaultEvaluatorAI(BaseEvaluatorAI):
     """デフォルトのEvaluator AI実装"""
+    component_type = Component.EVALUATOR
     
     def __init__(self, session: Session, llm_manager: LLMManager, **kwargs) -> None:
         """
@@ -137,7 +138,11 @@ class DefaultEvaluatorAI(BaseEvaluatorAI):
                 task_data = content.get("task")
                 result_data = content.get("result")
                 if not task_data:
-                    raise ValueError("evaluate コマンドには 'task' データが必要です")
+                    return [self._create_error_response(
+                        message.sender,
+                        "evaluate コマンドには 'task' データが必要です",
+                        "invalid_command"
+                    )]
                 
                 task = SubTask.model_validate(task_data)
                 result = TaskExecutionResult.model_validate(result_data) if result_data else None
@@ -151,7 +156,11 @@ class DefaultEvaluatorAI(BaseEvaluatorAI):
             elif action == "suggest":
                 evaluation_data = content.get("evaluation")
                 if not evaluation_data:
-                    raise ValueError("suggest コマンドには 'evaluation' データが必要です")
+                    return [self._create_error_response(
+                        message.sender,
+                        "suggest コマンドには 'evaluation' データが必要です",
+                        "invalid_command"
+                    )]
                 
                 evaluation = EvaluationResult.model_validate(evaluation_data)
                 improvements = self.suggest_improvements(evaluation)
@@ -168,9 +177,11 @@ class DefaultEvaluatorAI(BaseEvaluatorAI):
                     "unsupported_action"
                 )]
         except Exception as e:
+            error_msg = f"コマンド処理中にエラーが発生しました: {str(e)}"
+            print(f"[Evaluator] {error_msg}")
             return [self._create_error_response(
                 message.sender,
-                f"コマンド処理中にエラーが発生しました: {str(e)}",
+                error_msg,
                 f"{action}_failed" if action else "command_failed"
             )]
     
@@ -197,11 +208,13 @@ class DefaultEvaluatorAI(BaseEvaluatorAI):
                 is_successful=True,  # LLMの応答から適切に判定する必要あり
                 score=0.8,  # LLMの応答から適切に計算する必要あり
                 feedback=llm_response,
-                metrics={
-                    "quality": 0.8,
-                    "completeness": 0.9,
-                    "efficiency": 0.7
-                }
+                metrics=EvaluationMetrics(
+                    quality=0.8,
+                    completeness=0.9,
+                    relevance=0.7,
+                    creativity=0.6,
+                    technical_accuracy=0.8
+                )
             )
             
             # タスクの状態を更新

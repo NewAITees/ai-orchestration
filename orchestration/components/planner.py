@@ -135,6 +135,7 @@ class PlannerAI(BasePlannerAI):
 
 class DefaultPlannerAI(BasePlannerAI):
     """デフォルトのPlanner AI実装"""
+    component_type = Component.PLANNER
     
     def __init__(self, session: Session, llm_manager: LLMManager, **kwargs) -> None:
         """
@@ -158,32 +159,41 @@ class DefaultPlannerAI(BasePlannerAI):
         action = content.get("action")
         
         try:
-            if action == "plan_task":
+            if action == "plan":
                 task_data = content.get("task")
-                requirements = content.get("requirements", [])
                 if not task_data:
-                    raise ValueError("plan_task コマンドには 'task' データが必要です")
+                    return [self._create_error_response(
+                        message.sender,
+                        "plan コマンドには 'task' データが必要です",
+                        "invalid_command"
+                    )]
                 
-                task = TaskModel.model_validate(task_data)
-                plan = self.plan_task(task, requirements)
+                task = Task.model_validate(task_data)
+                plan = self.create_plan(task)
                 
                 return [self._create_response(
                     message.sender,
                     {"plan": plan.model_dump()},
-                    "planning_completed"
+                    "plan_created"
                 )]
-            elif action == "validate":
+            elif action == "revise":
                 plan_data = content.get("plan")
-                if not plan_data:
-                    raise ValueError("validate コマンドには 'plan' データが必要です")
+                feedback_data = content.get("feedback")
+                if not plan_data or not feedback_data:
+                    return [self._create_error_response(
+                        message.sender,
+                        "revise コマンドには 'plan' と 'feedback' データが必要です",
+                        "invalid_command"
+                    )]
                 
-                plan = PlanningResult.model_validate(plan_data)
-                is_valid = self.validate_plan(plan)
+                plan = Plan.model_validate(plan_data)
+                feedback = PlanFeedback.model_validate(feedback_data)
+                revised_plan = self.revise_plan(plan, feedback)
                 
                 return [self._create_response(
                     message.sender,
-                    {"is_valid": is_valid},
-                    "validation_completed"
+                    {"plan": revised_plan.model_dump()},
+                    "plan_revised"
                 )]
             else:
                 return [self._create_error_response(
@@ -192,158 +202,101 @@ class DefaultPlannerAI(BasePlannerAI):
                     "unsupported_action"
                 )]
         except Exception as e:
+            error_msg = f"コマンド処理中にエラーが発生しました: {str(e)}"
+            print(f"[Planner] {error_msg}")
             return [self._create_error_response(
                 message.sender,
-                f"コマンド処理中にエラーが発生しました: {str(e)}",
+                error_msg,
                 f"{action}_failed" if action else "command_failed"
             )]
     
-    def plan_task(self, task: TaskModel, requirements: Optional[List[str]] = None) -> PlanningResult:
+    def create_plan(self, task: Task) -> Plan:
         """
-        タスクの実行計画を生成
+        タスクの実行計画を作成
         Args:
-            task: 計画対象のタスク
-            requirements: 追加の要件（オプション）
+            task: 計画を作成するタスク
         Returns:
-            生成された実行計画
+            作成された計画
         """
         try:
-            # タスクの状態を計画中に更新
+            # タスクの状態を計画作成中に更新
             self.update_status(task.id, TaskStatus.PLANNING)
             
-            # LLMを使用してタスクを分析し、サブタスクに分解
-            prompt = self._create_planning_prompt(task, requirements)
+            # LLMを使用して計画を生成
+            prompt = self._create_planning_prompt(task)
             llm_response = self.llm_manager.generate(prompt)
             
-            # LLMの応答からサブタスクを生成
-            subtasks = self._parse_llm_response(llm_response)
-            
-            # 計画結果を作成
-            plan = PlanningResult(
+            # 計画を生成（実際の実装ではLLMの応答を適切にパース）
+            plan = Plan(
+                id=generate_id(prefix="plan"),
                 task_id=task.id,
-                subtasks=subtasks,
-                requirements=requirements or [],
-                planning_summary=f"タスク '{task.title}' を {len(subtasks)} 個のサブタスクに分解しました"
+                steps=[
+                    PlanStep(
+                        id=generate_id(prefix="step"),
+                        description="サンプルステップ",
+                        estimated_duration=60,
+                        dependencies=[],
+                        resources=[]
+                    )
+                ],
+                estimated_completion_time=datetime.now() + timedelta(hours=1),
+                status=PlanStatus.CREATED,
+                metadata={"complexity": "medium", "priority": "high"}
             )
             
             # タスクの状態を更新
             self.update_status(
                 task.id,
-                TaskStatus.PLANNING_COMPLETED,
+                TaskStatus.PLANNED,
                 {"plan": plan.model_dump()}
             )
             
             return plan
             
         except Exception as e:
-            error_msg = f"タスク計画の生成中にエラーが発生しました: {str(e)}"
+            error_msg = f"計画作成中にエラーが発生しました: {str(e)}"
             print(f"[Planner] {error_msg}")
             self.update_status(task.id, TaskStatus.FAILED, {"error": error_msg})
             raise
     
-    def validate_plan(self, plan: PlanningResult) -> bool:
+    def revise_plan(self, plan: Plan, feedback: PlanFeedback) -> Plan:
         """
-        生成された計画の妥当性を検証
+        フィードバックに基づいて計画を修正
         Args:
-            plan: 検証する計画
+            plan: 修正する計画
+            feedback: 計画に対するフィードバック
         Returns:
-            計画が妥当な場合はTrue
+            修正された計画
         """
         try:
-            # 基本的な検証
-            if not plan.subtasks:
-                return False
+            # タスクの状態を計画修正中に更新
+            self.update_status(plan.task_id, TaskStatus.REVISING)
             
-            # サブタスク間の依存関係を検証
-            dependency_graph = {}
-            for subtask in plan.subtasks:
-                dependency_graph[subtask.id] = set(subtask.dependencies)
+            # LLMを使用して計画を修正
+            prompt = self._create_revision_prompt(plan, feedback)
+            llm_response = self.llm_manager.generate(prompt)
             
-            # 循環依存のチェック
-            visited = set()
-            temp_visited = set()
+            # 修正された計画を生成（実際の実装ではLLMの応答を適切にパース）
+            revised_plan = Plan(
+                id=generate_id(prefix="plan"),
+                task_id=plan.task_id,
+                steps=plan.steps,  # 実際には修正されたステップを設定
+                estimated_completion_time=plan.estimated_completion_time,
+                status=PlanStatus.REVISED,
+                metadata=plan.metadata
+            )
             
-            def has_cycle(task_id: str) -> bool:
-                if task_id in temp_visited:
-                    return True
-                if task_id in visited:
-                    return False
-                
-                temp_visited.add(task_id)
-                for dep in dependency_graph[task_id]:
-                    if has_cycle(dep):
-                        return True
-                temp_visited.remove(task_id)
-                visited.add(task_id)
-                return False
+            # タスクの状態を更新
+            self.update_status(
+                plan.task_id,
+                TaskStatus.PLANNED,
+                {"plan": revised_plan.model_dump()}
+            )
             
-            for task_id in dependency_graph:
-                if has_cycle(task_id):
-                    return False
-            
-            return True
+            return revised_plan
             
         except Exception as e:
-            print(f"[Planner] 計画の検証中にエラーが発生しました: {e}")
-            return False
-    
-    def _create_planning_prompt(self, task: TaskModel, requirements: Optional[List[str]]) -> str:
-        """
-        タスク計画生成用のプロンプトを作成
-        Args:
-            task: 計画対象のタスク
-            requirements: 追加の要件
-        Returns:
-            生成されたプロンプト
-        """
-        prompt = f"""
-        タスク '{task.title}' の実行計画を生成してください。
-        
-        タスクの説明:
-        {task.description}
-        
-        追加の要件:
-        """
-        
-        if requirements:
-            for i, req in enumerate(requirements, 1):
-                prompt += f"\n{i}. {req}"
-        else:
-            prompt += "\n(追加の要件はありません)"
-        
-        prompt += """
-        
-        以下の形式でサブタスクを提案してください:
-        1. サブタスクのタイトル
-        2. サブタスクの説明
-        3. 依存関係（他のサブタスクへの依存）
-        4. 成功基準
-        
-        各サブタスクは独立して実行可能で、明確な目標を持つようにしてください。
-        """
-        
-        return prompt
-    
-    def _parse_llm_response(self, llm_response: str) -> List[SubTask]:
-        """
-        LLMの応答からサブタスクのリストを生成
-        Args:
-            llm_response: LLMからの応答テキスト
-        Returns:
-            生成されたサブタスクのリスト
-        """
-        # 注: 実際の実装では、LLMの応答形式に応じてより堅牢なパース処理が必要
-        # ここでは簡略化のためダミーのサブタスクを生成
-        subtasks = []
-        
-        # ダミーのサブタスク生成（実際の実装では LLM の応答を適切にパース）
-        subtask = SubTask(
-            id=generate_id(prefix="subtask"),
-            title="サンプルサブタスク",
-            description="これはサンプルのサブタスクです",
-            dependencies=[],
-            status=TaskStatus.PENDING
-        )
-        subtasks.append(subtask)
-        
-        return subtasks 
+            error_msg = f"計画修正中にエラーが発生しました: {str(e)}"
+            print(f"[Planner] {error_msg}")
+            self.update_status(plan.task_id, TaskStatus.FAILED, {"error": error_msg})
+            raise 

@@ -65,13 +65,15 @@ class BaseAIComponent(ABC):
                 return [self._create_error_response(
                     message.sender,
                     f"未対応のメッセージタイプ: {message.type}",
-                    action="unsupported_message_type"
+                    "unsupported_message_type"
                 )]
         except Exception as e:
+            error_msg = f"メッセージ処理中にエラーが発生しました: {str(e)}"
+            print(f"[{self.component_type}] {error_msg}")
             return [self._create_error_response(
                 message.sender,
-                f"メッセージ処理中にエラー発生: {e}",
-                action="message_processing_error"
+                error_msg,
+                "message_processing_error"
             )]
     
     def get_status(self, task_id: TaskID) -> Optional[TaskStatusModel]:
@@ -92,13 +94,19 @@ class BaseAIComponent(ABC):
             status: 新しい状態
             metadata: 追加のメタデータ
         """
-        current = self.component_status.get(task_id, TaskStatusModel(task_id=task_id))
-        current.status = status
-        if metadata:
-            current.metadata.update(metadata)
-        self.component_status[task_id] = current
-        # セッションの状態も更新
-        self.session.update_task_status(task_id, status)
+        try:
+            current = self.component_status.get(task_id, TaskStatusModel(task_id=task_id))
+            current.status = status
+            if metadata:
+                current.metadata.update(metadata)
+            self.component_status[task_id] = current
+            # セッションの状態も更新
+            self.session.update_task_status(task_id, status)
+            print(f"[{self.component_type}] タスク {task_id} の状態を {status} に更新しました")
+        except Exception as e:
+            error_msg = f"状態更新中にエラーが発生しました: {str(e)}"
+            print(f"[{self.component_type}] {error_msg}")
+            raise
     
     @abstractmethod
     def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
@@ -116,25 +124,34 @@ class BaseAIComponent(ABC):
         content = message.content
         query_type = content.get("query_type")
         
-        if query_type == "status":
-            task_id = content.get("task_id")
-            if not task_id:
+        try:
+            if query_type == "status":
+                task_id = content.get("task_id")
+                if not task_id:
+                    return [self._create_error_response(
+                        message.sender,
+                        "task_id が指定されていません",
+                        "invalid_query"
+                    )]
+                status = self.get_status(task_id)
+                return [self._create_response(
+                    message.sender,
+                    {"status": status.model_dump() if status else None},
+                    "status_query_response"
+                )]
+            else:
                 return [self._create_error_response(
                     message.sender,
-                    "task_id が指定されていません",
-                    action="invalid_query"
+                    f"未対応のクエリタイプ: {query_type}",
+                    "unsupported_query_type"
                 )]
-            status = self.get_status(task_id)
-            return [self._create_response(
-                message.sender,
-                {"status": status.model_dump() if status else None},
-                "status_query_response"
-            )]
-        else:
+        except Exception as e:
+            error_msg = f"クエリ処理中にエラーが発生しました: {str(e)}"
+            print(f"[{self.component_type}] {error_msg}")
             return [self._create_error_response(
                 message.sender,
-                f"未対応のクエリタイプ: {query_type}",
-                action="unsupported_query_type"
+                error_msg,
+                "query_processing_error"
             )]
     
     def _create_response(
@@ -156,7 +173,7 @@ class BaseAIComponent(ABC):
             type=MessageType.RESPONSE,
             sender=self.component_type,
             receiver=receiver,
-            content=content,
+            content={"status": "success", **content},
             session_id=self.session.id,
             action=action
         )
@@ -176,10 +193,13 @@ class BaseAIComponent(ABC):
         Returns:
             作成されたエラーメッセージ
         """
-        return self._create_response(
-            receiver,
-            {"error": error_message},
-            action
+        return OrchestrationMessage(
+            type=MessageType.ERROR,
+            sender=self.component_type,
+            receiver=receiver,
+            content={"status": "failure", "error": error_message},
+            session_id=self.session.id,
+            action=action
         )
 
 # --- 各コンポーネントの基底クラスとプロトコル (Director, Planner, Worker, Reviewer) ---
