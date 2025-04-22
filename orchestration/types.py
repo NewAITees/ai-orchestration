@@ -1,7 +1,8 @@
 from enum import Enum, auto
 from typing import Dict, List, Optional, Any, Union, Literal, TypedDict, Protocol, runtime_checkable
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from abc import ABC, abstractmethod
 
 
 class OrchestratorMode(str, Enum):
@@ -208,6 +209,21 @@ class TaskModel(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
 
+    model_config = ConfigDict(
+        from_attributes=True,  # Allow ORM mode
+        validate_assignment=True,  # Validate when attributes are assigned
+        json_encoders={  # Custom JSON encoders
+            datetime: lambda dt: dt.isoformat()
+        }
+    )
+
+    def update_status(self, status: TaskStatus) -> None:
+        """タスクの状態を更新する"""
+        self.status = status
+        self.updated_at = datetime.now()
+        if status == TaskStatus.COMPLETED:
+            self.completed_at = datetime.now()
+
 
 class TaskStatusModel(BaseModel):
     """タスクステータスの詳細モデル"""
@@ -230,17 +246,121 @@ class MessageModel(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
+# AI Component Interfaces and Base Classes
 @runtime_checkable
-class IWorkerAI(Protocol):
-    """Worker AIのインターフェース"""
+class IDirectorAI(Protocol):
+    """Director AIのインターフェース"""
+    
+    @abstractmethod
     def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
         """メッセージを処理し、応答メッセージのリストを返す"""
         pass
     
+    @abstractmethod
+    def control_process(self, task_id: TaskID) -> None:
+        """タスクの実行プロセスを制御する"""
+        pass
+
+@runtime_checkable
+class IPlannerAI(Protocol):
+    """Planner AIのインターフェース"""
+    
+    @abstractmethod
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """メッセージを処理し、応答メッセージのリストを返す"""
+        pass
+    
+    @abstractmethod
+    def analyze_task(self, task: str) -> TaskAnalysisResult:
+        """タスクを分析し、構造化された結果を返す"""
+        pass
+
+@runtime_checkable
+class IWorkerAI(Protocol):
+    """Worker AIのインターフェース"""
+    
+    @abstractmethod
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """メッセージを処理し、応答メッセージのリストを返す"""
+        pass
+    
+    @abstractmethod
     def execute_task(self, task: SubTask) -> TaskExecutionResult:
         """タスクを実行し、結果を返す"""
         pass
 
+@runtime_checkable
+class IReviewerAI(Protocol):
+    """Reviewer AIのインターフェース"""
+    
+    @abstractmethod
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """メッセージを処理し、応答メッセージのリストを返す"""
+        pass
+    
+    @abstractmethod
+    def review_task(self, task: SubTask) -> ReviewResult:
+        """タスクをレビューし、結果を返す"""
+        pass
+
+class BaseAIComponent(ABC):
+    """全AIコンポーネントの共通基底クラス"""
+    
+    def __init__(self, session: 'Session'):
+        """
+        初期化
+        Args:
+            session: 関連付けられたセッション
+        """
+        self.session = session
+        self.current_task: Optional[SubTask] = None
+    
+    @abstractmethod
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """メッセージを処理し、応答メッセージのリストを返す"""
+        pass
+    
+    def _create_message(
+        self,
+        receiver: Component,
+        message_type: MessageType,
+        content: Dict[str, Any]
+    ) -> OrchestrationMessage:
+        """
+        メッセージを作成する
+        Args:
+            receiver: メッセージの受信者
+            message_type: メッセージのタイプ
+            content: メッセージの内容
+        Returns:
+            作成されたメッセージ
+        """
+        return OrchestrationMessage(
+            type=message_type,
+            sender=self.component_type,  # コンポーネントタイプは継承先で定義
+            receiver=receiver,
+            content=content,
+            session_id=self.session.id
+        )
+    
+    def _create_error_message(
+        self,
+        receiver: Component,
+        error_message: str
+    ) -> OrchestrationMessage:
+        """
+        エラーメッセージを作成する
+        Args:
+            receiver: メッセージの受信者
+            error_message: エラーメッセージ
+        Returns:
+            作成されたエラーメッセージ
+        """
+        return self._create_message(
+            receiver,
+            MessageType.ERROR,
+            {"error": error_message}
+        )
 
 class TaskExecutionResult(BaseModel):
     """タスク実行結果を表すモデル"""
@@ -279,4 +399,68 @@ class OrchestrationMessage(BaseModel):
     content: Dict[str, Any]
     session_id: str
     action: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now) 
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class TaskAnalysisResult(BaseModel):
+    """タスク分析結果のモデル"""
+    
+    main_task: str = Field(..., description="分析対象のメインタスク")
+    task_type: str = Field(..., description="タスクのタイプ")
+    complexity: int = Field(ge=1, le=10, description="タスクの複雑さ (1-10)")
+    estimated_steps: int = Field(..., description="推定されるステップ数")
+    subtasks: List[Dict[str, Any]] = Field(..., description="サブタスクのリスト")
+    requirements: List[str] = Field(default_factory=list, description="タスクの要件")
+    constraints: List[str] = Field(default_factory=list, description="タスクの制約")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "main_task": "小説の執筆",
+                    "task_type": "creative_writing",
+                    "complexity": 8,
+                    "estimated_steps": 5,
+                    "subtasks": [
+                        {"id": "plot", "title": "プロット作成"},
+                        {"id": "characters", "title": "キャラクター設定"}
+                    ],
+                    "requirements": ["3000文字以上", "SF要素を含む"],
+                    "constraints": ["暴力的な表現を避ける"]
+                }
+            ]
+        }
+    )
+
+class ReviewResult(BaseModel):
+    """レビュー結果のモデル"""
+    
+    task_id: str = Field(..., description="タスクの一意な識別子")
+    status: str = Field(..., description="レビューの状態")
+    score: float = Field(..., description="タスクの評価スコア")
+    feedback: str = Field(..., description="タスクに関するフィードバック")
+    suggestions: List[str] = Field(default_factory=list, description="改善提案のリスト")
+    metrics: Dict[str, float] = Field(default_factory=dict, description="評価指標")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "task_id": "task_123",
+                    "status": "reviewed",
+                    "score": 8.5,
+                    "feedback": "全体的に良好な出力です。",
+                    "suggestions": ["文章の簡潔さを改善", "具体例の追加"],
+                    "metrics": {
+                        "readability": 0.85,
+                        "coherence": 0.92,
+                        "creativity": 0.78
+                    }
+                }
+            ]
+        }
+    ) 

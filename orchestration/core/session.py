@@ -22,17 +22,6 @@ if TYPE_CHECKING:
     from ..factory import AIComponentFactory
     from ..commands import CommandDispatcher
 
-class TaskStatus(str, Enum):
-    """タスクの状態"""
-    PENDING = "pending"           # 待機中
-    PLANNING = "planning"         # 計画中
-    AWAITING_FEEDBACK = "awaiting_feedback"  # フィードバック待ち
-    EXECUTING = "executing"       # 実行中
-    INTEGRATING = "integrating"   # 統合中
-    COMPLETED = "completed"       # 完了
-    FAILED = "failed"             # 失敗
-    CANCELLED = "cancelled"       # キャンセル
-
 class SubtaskStatus(str, Enum):
     """サブタスクの状態"""
     PENDING = "pending"           # 待機中
@@ -90,19 +79,6 @@ class Task:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
-    
-    def update_status(self, status: TaskStatus) -> None:
-        """ステータスを更新"""
-        self.status = status
-        self.updated_at = datetime.now()
-        if status == TaskStatus.COMPLETED:
-            self.completed_at = datetime.now()
-
-class SubTask(TaskModel):
-    """サブタスク"""
-    parent_id: Optional[str] = None
-    dependencies: List[str] = Field(default_factory=list)
-    priority: int = 0
     
     def update_status(self, status: TaskStatus) -> None:
         """ステータスを更新"""
@@ -210,14 +186,13 @@ class Session:
         """セッションの状態をシリアライズ可能な辞書に変換する。"""
         # Pydantic V2 スタイル: model_dump() を使用
         subtasks_dict = {
-            tid: task.model_dump(mode='json') # mode='json'でdatetimeをISO文字列に
+            tid: task.model_dump(mode='json')  # mode='json'でdatetimeをISO文字列に
             for tid, task in self.subtasks.items()
         }
         return {
             "id": self.id,
             "mode": self.mode,
             "status": self.status.value,
-            # datetimeはISOフォーマット文字列で保存
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "subtasks": subtasks_dict,
@@ -235,8 +210,7 @@ class Session:
         session_id = data['id']
         mode = data.get('mode')
         config = data.get('config')
-        status = SessionStatus(data.get('status', SessionStatus.PENDING.value)) # デフォルト値もEnumメンバーを使用
-        # ISOフォーマット文字列からdatetimeオブジェクトに復元
+        status = SessionStatus(data.get('status', SessionStatus.PENDING.value))
         created_at = datetime.fromisoformat(data['created_at'])
         updated_at = datetime.fromisoformat(data['updated_at'])
 
@@ -260,9 +234,9 @@ class Session:
                 task = SubTask.model_validate(task_data)
                 session.subtasks[task_id] = task
             except ValidationError as e:
-                 print(f"警告: セッション {session_id} のタスク {task_id} の復元中にバリデーションエラー: {e}")
+                print(f"警告: セッション {session_id} のタスク {task_id} の復元中にバリデーションエラー: {e}")
             except Exception as e:
-                 print(f"警告: セッション {session_id} のタスク {task_id} の復元中に予期せぬエラー: {e}")
+                print(f"警告: セッション {session_id} のタスク {task_id} の復元中に予期せぬエラー: {e}")
 
         print(f"セッション {session_id} を辞書から復元しました。")
         return session
@@ -417,49 +391,41 @@ class SessionManager:
 
 
     def _load_session(self, file_path: Path) -> Optional[Session]:
-        """指定されたパスから単一セッションをロードし、メモリに格納して返す"""
-        session_id = file_path.stem
+        """JSONファイルからセッションを読み込む"""
         try:
-            # json_deserialize を使用
             with open(file_path, "r", encoding="utf-8") as f:
-                 # data = json.load(f) # 旧
-                 data = json_deserialize(f.read()) # 新
-
+                session_data = json.load(f)
+            
+            # セッションを復元
             session = Session.from_dict(
-                data=data,
+                data=session_data,
                 llm_manager=self.llm_manager,
                 factory=self.factory
             )
-            self.sessions[session.id] = session # メモリに格納
-            # print(f"ファイル {file_path} からセッション {session.id} を正常にロードしました。")
+            
+            # メモリ上のセッション辞書に追加
+            self.sessions[session.id] = session
+            print(f"セッション {session.id} をファイル {file_path} から読み込みました。")
             return session
-        except FileNotFoundError:
-             print(f"エラー: セッションファイルが見つかりません: {file_path}")
-        except json.JSONDecodeError as e:
-             print(f"エラー: セッションファイル {file_path} のJSON解析に失敗しました: {e}")
+            
         except ValidationError as e:
-             print(f"エラー: セッション {session_id} のロード中に Pydantic バリデーションエラー: {e}")
+            print(f"エラー: セッションデータのバリデーションに失敗しました ({file_path}): {e}")
+            return None
         except Exception as e:
-            print(f"エラー: セッション {session_id} のロード中に予期せぬエラー ({type(e).__name__}): {e}")
-        return None # ロード失敗
+            print(f"エラー: セッションの読み込みに失敗しました ({file_path}): {e}")
+            return None
 
 
     def _save_session(self, session: Session) -> None:
         """セッションの状態をJSONファイルに保存"""
         file_path = self.storage_dir / f"{session.id}.json"
         try:
-            session_data_dict = session.to_dict()
-            # json_serialize を使用
-            # json_serialize は indent をサポートしていない可能性があるため、
-            # 整形したい場合は json.dumps を直接使うか、serializeを修正する必要がある
-            # session_data_json = json_serialize(session_data_dict) # オブジェクト -> JSON文字列
-            # 整形されたJSON文字列を保存する場合:
-            session_data_json = json.dumps(session_data_dict, indent=2, ensure_ascii=False)
-
-
+            # Pydantic V2 スタイル: model_dump() を使用
+            session_data = session.to_dict()  # to_dict()メソッドはすでにmodel_dump()を使用
+            
+            # JSON文字列に変換して保存
             with open(file_path, "w", encoding="utf-8") as f:
-                 # json.dump(session_data, f, indent=2, ensure_ascii=False) # 旧
-                 f.write(session_data_json) # JSON文字列を書き込み
+                json.dump(session_data, f, indent=2, ensure_ascii=False)
             print(f"セッション {session.id} を {file_path} に保存しました。")
         except Exception as e:
             print(f"エラー: セッション {session.id} の保存に失敗しました ({file_path}): {e}") 

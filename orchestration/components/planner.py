@@ -1,49 +1,32 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Protocol, TYPE_CHECKING
-from pydantic import BaseModel, Field
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from ..core.message import OrchestrationMessage, MessageType, Component
-from ..core.session import Session, SubTask
+from ..core.session import Session
 from .llm_manager import LLMManager
-from .base import BasePlannerAI
-from ..types import TaskModel
+from ..types import (
+    TaskModel, TaskAnalysisResult, IPlannerAI,
+    BaseAIComponent, SubTask
+)
 
-class TaskAnalysisResult(BaseModel):
-    """タスク分析結果のモデル"""
-    
-    main_task: str = Field(..., description="分析対象のメインタスク")
-    task_type: str = Field(..., description="タスクのタイプ")
-    complexity: int = Field(ge=1, le=10, description="タスクの複雑さ (1-10)")
-    estimated_steps: int = Field(..., description="推定されるステップ数")
-    subtasks: List[Dict[str, Any]] = Field(..., description="サブタスクのリスト")
-    requirements: List[str] = Field(default_factory=list, description="タスクの要件")
-    constraints: List[str] = Field(default_factory=list, description="タスクの制約")
-
-class IPlannerAI(Protocol):
-    """Planner AIのインターフェース"""
-    
-    @abstractmethod
-    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
-        """メッセージを処理し、応答メッセージのリストを返す"""
-        pass
-    
-    @abstractmethod
-    def analyze_task(self, task: str) -> TaskAnalysisResult:
-        """タスクを分析し、構造化された結果を返す"""
-        pass
-
-class PlannerAI(BasePlannerAI):
+class PlannerAI(BaseAIComponent):
     """
     Planner AI の具体的な実装例。
     タスク計画や要件分析を担当する。
     """
+    component_type = Component.PLANNER
 
-    def __init__(self, session: 'Session', llm_manager: 'BaseLLMManager', **kwargs) -> None:
+    def __init__(self, session: Session, llm_manager: LLMManager, **kwargs) -> None:
         """PlannerAIを初期化"""
-        # Call the base class __init__
-        super().__init__(session, llm_manager, **kwargs)
-        # Add Planner-specific initialization if needed
-        # Example: self.planning_depth = kwargs.get("planning_depth", 3)
+        super().__init__(session)
+        self.llm_manager = llm_manager
         print(f"PlannerAI ({self.session.id}) initialized with config: {kwargs}")
+
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """メッセージを処理し、応答メッセージのリストを返す"""
+        pass  # 実装は省略
+
+    def analyze_task(self, task: str) -> TaskAnalysisResult:
+        """タスクを分析し、構造化された結果を返す"""
+        pass  # 実装は省略
 
     def analyze_requirements(self, requirements: List[str]) -> List[SubTask]:
         """
@@ -133,7 +116,7 @@ class PlannerAI(BasePlannerAI):
     #     # Logic to parse JSON or structured text from LLM
     #     pass
 
-class DefaultPlannerAI(BasePlannerAI):
+class DefaultPlannerAI(BaseAIComponent):
     """デフォルトのPlanner AI実装"""
     component_type = Component.PLANNER
     
@@ -145,7 +128,8 @@ class DefaultPlannerAI(BasePlannerAI):
             llm_manager: LLMマネージャー
             **kwargs: 追加の設定パラメータ
         """
-        super().__init__(session, llm_manager, **kwargs)
+        super().__init__(session)
+        self.llm_manager = llm_manager
     
     def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
         """
