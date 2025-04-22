@@ -1,15 +1,19 @@
 import pytest
+from unittest.mock import Mock, patch
+from app.orchestration.core.session import Session
+from app.orchestration.components.reviewer import ReviewerAI
+from app.orchestration.types import ReviewResult
+from app.llm.llm_manager import LLMManager
 from typing import Dict, Any
 from app.orchestration.core.message import OrchestrationMessage, MessageType, Component
 from app.orchestration.core.session import SubTask
-from app.orchestration.components.evaluator import EvaluatorAI, EvaluationResult
 
-def test_evaluator_initialization(evaluator: EvaluatorAI, test_session):
+def test_evaluator_initialization(evaluator: ReviewerAI, test_session):
     """Evaluator AIの初期化テスト"""
     assert evaluator.session == test_session
     assert evaluator.llm_manager is not None
 
-def test_evaluate_creative_task(evaluator: EvaluatorAI, test_session):
+def test_evaluate_creative_task(evaluator: ReviewerAI, test_session):
     """創作タスクの評価テスト"""
     # テスト用のタスクを作成
     task = SubTask(
@@ -48,7 +52,7 @@ def test_evaluate_creative_task(evaluator: EvaluatorAI, test_session):
     assert "metrics" in result
     assert "suggestions" in result
 
-def test_evaluate_task_with_criteria(evaluator: EvaluatorAI, test_session):
+def test_evaluate_task_with_criteria(evaluator: ReviewerAI, test_session):
     """評価基準付きのタスク評価テスト"""
     task = SubTask(
         id="test_criteria_task",
@@ -82,7 +86,7 @@ def test_evaluate_task_with_criteria(evaluator: EvaluatorAI, test_session):
     for criterion in task.criteria.keys():
         assert criterion in result["metrics"]
 
-def test_evaluate_task_error_handling(evaluator: EvaluatorAI, test_session):
+def test_evaluate_task_error_handling(evaluator: ReviewerAI, test_session):
     """タスク評価のエラーハンドリングテスト"""
     # 存在しないタスクIDで評価を試みる
     message = OrchestrationMessage(
@@ -100,7 +104,7 @@ def test_evaluate_task_error_handling(evaluator: EvaluatorAI, test_session):
     assert response.type == MessageType.ERROR
     assert "タスクが見つかりません" in response.content["error"]
 
-def test_invalid_message_type(evaluator: EvaluatorAI):
+def test_invalid_message_type(evaluator: ReviewerAI):
     """無効なメッセージタイプのテスト"""
     message = OrchestrationMessage(
         type=MessageType.RESPONSE,  # 無効なメッセージタイプ
@@ -117,7 +121,7 @@ def test_invalid_message_type(evaluator: EvaluatorAI):
     assert response.type == MessageType.ERROR
     assert "サポートされていないメッセージタイプ" in response.content["error"]
 
-def test_evaluate_task_with_feedback_history(evaluator: EvaluatorAI, test_session):
+def test_evaluate_task_with_feedback_history(evaluator: ReviewerAI, test_session):
     """フィードバック履歴を考慮したタスク評価テスト"""
     task = SubTask(
         id="test_feedback_task",

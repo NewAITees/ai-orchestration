@@ -2,7 +2,7 @@ import json
 from typing import Dict, Any
 from app.orchestration.core.session import Session, SubTask
 from app.orchestration.core.message import OrchestrationMessage, MessageType, Component
-from app.orchestration.components.evaluator import EvaluatorAI
+from app.orchestration.components.reviewer import ReviewerAI
 from app.llm.llm_manager import LLMManager
 
 def print_evaluation_result(result: Dict[str, Any]) -> None:
@@ -45,7 +45,7 @@ def main():
     llm_manager = LLMManager()
     
     # Evaluator AIの初期化
-    evaluator = EvaluatorAI(session, llm_manager)
+    evaluator = ReviewerAI(session, llm_manager)
     
     while True:
         print("\n1. タスクを評価する")

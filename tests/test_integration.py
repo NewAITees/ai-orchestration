@@ -5,7 +5,7 @@ from app.main import app
 from app.core.config import Settings
 from app.orchestration.core.session import Session, CreativeTask
 from app.orchestration.components.director import DirectorAI
-from app.orchestration.components.evaluator import EvaluatorAI
+from app.orchestration.components.reviewer import ReviewerAI
 from app.orchestration.components.planner import PlannerAI
 from app.orchestration.components.worker import WorkerAI
 from app.core.ai_components import DirectorAI as CoreDirectorAI, PlannerAI as CorePlannerAI, WorkerAI as CoreWorkerAI, ReviewerAI
@@ -133,7 +133,7 @@ class TestProcessFlow:
 def test_creative_session_flow(
     client: TestClient,
     test_session: Session,
-    evaluator: EvaluatorAI,
+    evaluator: ReviewerAI,
     planner: PlannerAI,
     worker: WorkerAI
 ):

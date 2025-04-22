@@ -6,6 +6,7 @@ from .components.director import DirectorAI  # Placeholder, replace with actual 
 from .components.planner import PlannerAI    # Placeholder, replace with actual class
 from .components.worker import WorkerAI      # Placeholder, replace with actual class
 from .components.evaluator import EvaluatorAI # Placeholder, replace with actual class
+from .components.reviewer import ReviewerAI
 # Assuming Reviewer is meant to be Evaluator as per proposal
 # from .components.reviewer import ReviewerAI # If ReviewerAI is separate, import it too
 

@@ -6,7 +6,7 @@ from ..core.session import Session, SubTask
 from ..types import TaskStatus, TaskStatusModel, OrchestrationMessage, MessageType, Component, TaskID, SubTask, FinalResult, SessionStatus
 from .planner import DefaultPlannerAI
 from .worker import DefaultWorkerAI
-from .evaluator import DefaultEvaluatorAI
+from .reviewer import ReviewerAI
 from .llm_manager import LLMManager
 from .base import BaseDirectorAI
 

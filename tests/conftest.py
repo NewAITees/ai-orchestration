@@ -4,9 +4,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.core.config import Settings
 from app.orchestration.core.session import Session
-from app.orchestration.components.evaluator import DefaultEvaluatorAI
+from app.orchestration.components.director import DefaultDirectorAI
 from app.orchestration.components.planner import DefaultPlannerAI
 from app.orchestration.components.worker import DefaultWorkerAI
+from app.orchestration.components.reviewer import ReviewerAI
 from app.llm.llm_manager import LLMManager, BaseLLMManager
 from app.orchestration.components.base import (
     AIComponent,

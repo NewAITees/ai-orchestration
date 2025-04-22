@@ -1,7 +1,7 @@
 from typing import Dict, List
 from app.orchestration.core.session import Session
 from app.orchestration.components.director import DefaultDirectorAI
-from app.orchestration.components.evaluator import DefaultEvaluatorAI
+from app.orchestration.components.reviewer import ReviewerAI
 from app.orchestration.components.planner import DefaultPlannerAI
 from app.orchestration.components.worker import DefaultWorkerAI
 from app.llm.llm_manager import LLMManager
@@ -71,7 +71,7 @@ def run_novel_writer(
     # 必要なコンポーネントの初期化
     llm_manager = LLMManager()
     director = DefaultDirectorAI(session, llm_manager)
-    evaluator = DefaultEvaluatorAI(session, llm_manager)
+    evaluator = ReviewerAI(session, llm_manager)
     planner = DefaultPlannerAI(session, llm_manager)
     worker = DefaultWorkerAI(session, llm_manager)
 

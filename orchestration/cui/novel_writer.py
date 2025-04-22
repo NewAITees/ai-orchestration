@@ -3,7 +3,7 @@ import sys
 from dataclasses import dataclass, field
 from app.orchestration.core.session import Session, Task, TaskStatus
 from app.orchestration.components.director import DefaultDirectorAI
-from app.orchestration.components.evaluator import DefaultEvaluatorAI
+from app.orchestration.components.reviewer import ReviewerAI
 from app.orchestration.components.planner import DefaultPlannerAI
 from app.orchestration.components.worker import DefaultWorkerAI
 from app.llm.llm_manager import LLMManager
@@ -43,7 +43,7 @@ class NovelWriter:
         self,
         session: Session,
         director: DefaultDirectorAI,
-        evaluator: DefaultEvaluatorAI,
+        evaluator: ReviewerAI,
         planner: DefaultPlannerAI,
         worker: DefaultWorkerAI,
         config: Optional[NovelWriterConfig] = None,
@@ -204,7 +204,7 @@ def main():
     session = Session(id="novel-session")
     llm_manager = LLMManager()
     director = DefaultDirectorAI(session, llm_manager)
-    evaluator = DefaultEvaluatorAI(session, llm_manager)
+    evaluator = ReviewerAI(session, llm_manager)
     planner = DefaultPlannerAI(session, llm_manager)
     worker = DefaultWorkerAI(session, llm_manager)
     
