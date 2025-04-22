@@ -9,6 +9,7 @@ from ..types import (
     OrchestrationMessage, SubTask
 )
 from .llm_manager import LLMManager
+import asyncio
 
 class BaseWorkerAI(ABC, IWorkerAI):
     """Worker AIの抽象基底クラス"""
@@ -85,171 +86,165 @@ class BaseWorkerAI(ABC, IWorkerAI):
 class DefaultWorkerAI(BaseWorkerAI):
     """デフォルトのWorker AI実装"""
     
-    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+    def __init__(self, session: Session, llm_manager: LLMManager, **kwargs) -> None:
         """
-        メッセージを処理し、応答メッセージのリストを返す
-        
+        初期化
+        Args:
+            session: 関連付けられたセッション
+            llm_manager: LLMマネージャー
+            **kwargs: 追加の設定パラメータ
+        """
+        super().__init__(session, llm_manager, **kwargs)
+        self.active_tasks: Dict[TaskID, asyncio.Task] = {}
+    
+    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """
+        コマンドメッセージを処理
         Args:
             message: 処理するメッセージ
-            
         Returns:
             応答メッセージのリスト
         """
-        if message.type != MessageType.COMMAND:
-            return [self._create_error_message(
-                message.sender,
-                f"サポートされていないメッセージタイプ: {message.type}"
-            )]
-        
         content = message.content
         action = content.get("action")
         
         try:
-            if action == "execute_task":
+            if action == "execute":
+                task_data = content.get("task")
+                context = content.get("context")
+                if not task_data:
+                    raise ValueError("execute コマンドには 'task' データが必要です")
+                
+                task = SubTask.model_validate(task_data)
+                result = self.execute_task(task, context)
+                
+                return [self._create_response(
+                    message.sender,
+                    {"result": result.model_dump()},
+                    "execution_completed"
+                )]
+            elif action == "stop":
                 task_id = content.get("task_id")
                 if not task_id:
-                    return [self._create_error_message(
-                        message.sender,
-                        "task_idが指定されていません"
-                    )]
-                return self._handle_execute_task(task_id)
-            elif action == "stop_task":
-                return self._handle_stop_task()
-            else:
-                return [self._create_error_message(
+                    raise ValueError("stop コマンドには 'task_id' が必要です")
+                
+                self.stop_execution(task_id)
+                
+                return [self._create_response(
                     message.sender,
-                    f"サポートされていないアクション: {action}"
+                    {"status": "stopped", "task_id": task_id},
+                    "execution_stopped"
+                )]
+            else:
+                return [self._create_error_response(
+                    message.sender,
+                    f"サポートされていないアクション: {action}",
+                    "unsupported_action"
                 )]
         except Exception as e:
-            return [self._create_error_message(
+            return [self._create_error_response(
                 message.sender,
-                f"メッセージ処理中にエラーが発生しました: {str(e)}"
+                f"コマンド処理中にエラーが発生しました: {str(e)}",
+                f"{action}_failed" if action else "command_failed"
             )]
     
-    def _handle_execute_task(self, task_id: str) -> List[OrchestrationMessage]:
+    def execute_task(self, task: SubTask, context: Optional[Dict[str, Any]] = None) -> TaskExecutionResult:
         """
         タスクを実行
-        
-        Args:
-            task_id: 実行するタスクのID
-            
-        Returns:
-            応答メッセージのリスト
-        """
-        try:
-            # タスクの取得
-            task = self.session.get_subtask(task_id)
-            if not task:
-                return [self._create_error_message(
-                    Component.DIRECTOR,
-                    f"タスクが見つかりません: {task_id}"
-                )]
-            
-            # タスクの状態を更新
-            task.update_status(TaskStatus.EXECUTING)
-            self.current_task = task
-            
-            # タスクの実行
-            execution_result = self.execute_task(task)
-            
-            # タスクの状態を更新
-            task.update_status(TaskStatus.COMPLETED)
-            task.result = execution_result.result
-            
-            # レスポンスメッセージを作成
-            return [self._create_message(
-                Component.DIRECTOR,
-                MessageType.RESPONSE,
-                {
-                    "action": "task_completed",
-                    "task_id": task_id,
-                    "result": execution_result.dict()
-                }
-            )]
-        
-        except Exception as e:
-            if self.current_task:
-                self.current_task.update_status(TaskStatus.FAILED)
-            return [self._create_error_message(
-                Component.DIRECTOR,
-                f"タスク実行中にエラーが発生しました: {str(e)}"
-            )]
-    
-    def _handle_stop_task(self) -> List[OrchestrationMessage]:
-        """
-        現在実行中のタスクを停止
-        
-        Returns:
-            応答メッセージのリスト
-        """
-        if not self.current_task:
-            return [self._create_error_message(
-                Component.DIRECTOR,
-                "実行中のタスクがありません"
-            )]
-        
-        try:
-            # タスクの状態を更新
-            self.current_task.update_status(TaskStatus.CANCELLED)
-            
-            # レスポンスメッセージを作成
-            return [self._create_message(
-                Component.DIRECTOR,
-                MessageType.RESPONSE,
-                {
-                    "action": "task_stopped",
-                    "task_id": self.current_task.id
-                }
-            )]
-        
-        except Exception as e:
-            return [self._create_error_message(
-                Component.DIRECTOR,
-                f"タスク停止中にエラーが発生しました: {str(e)}"
-            )]
-    
-    def execute_task(self, task: SubTask) -> TaskExecutionResult:
-        """
-        タスクを実行し、結果を返す
-        
         Args:
             task: 実行するタスク
-            
+            context: 実行コンテキスト（オプション）
         Returns:
-            タスクの実行結果
+            実行結果
         """
         try:
-            # タスクの種類に応じた処理を実行
-            prompt = f"""
-            以下のタスクを実行してください：
+            # タスクの状態を実行中に更新
+            self.update_status(task.id, TaskStatus.EXECUTING)
             
-            タスク: {task.title}
-            説明: {task.description}
-            要件: {task.requirements if hasattr(task, 'requirements') else []}
-            制約: {task.constraints if hasattr(task, 'constraints') else []}
+            # LLMを使用してタスクを実行
+            prompt = self._create_execution_prompt(task, context)
+            llm_response = self.llm_manager.generate(prompt)
             
-            出力形式:
-            1. 実行結果
-            2. フィードバック
-            3. 評価指標
-            """
-            
-            response = self.llm_manager.get_completion(prompt)
-            
-            # 現在はダミーの実装を提供
-            # 実際の実装では、LLMの応答を解析して適切な値を設定
-            return TaskExecutionResult(
+            # 実行結果を生成
+            result = TaskExecutionResult(
                 task_id=task.id,
                 status=TaskStatus.COMPLETED,
-                result={"output": response},
-                feedback="タスクが正常に完了しました",
-                metrics={"completion_rate": 1.0}
+                output=llm_response,
+                execution_time=datetime.now().isoformat(),
+                metadata={"context": context} if context else {}
             )
+            
+            # タスクの状態を更新
+            self.update_status(
+                task.id,
+                TaskStatus.COMPLETED,
+                {"result": result.model_dump()}
+            )
+            
+            return result
+            
         except Exception as e:
-            return TaskExecutionResult(
-                task_id=task.id,
-                status=TaskStatus.FAILED,
-                result={"error": str(e)},
-                feedback=f"タスク実行中にエラーが発生しました: {str(e)}",
-                metrics={"completion_rate": 0.0}
-            ) 
+            error_msg = f"タスク実行中にエラーが発生しました: {str(e)}"
+            print(f"[Worker] {error_msg}")
+            self.update_status(task.id, TaskStatus.FAILED, {"error": error_msg})
+            raise
+    
+    def stop_execution(self, task_id: TaskID) -> None:
+        """
+        タスクの実行を停止
+        Args:
+            task_id: 停止するタスクのID
+        """
+        try:
+            # 実行中のタスクを停止
+            if task_id in self.active_tasks:
+                task = self.active_tasks[task_id]
+                task.cancel()
+                del self.active_tasks[task_id]
+                
+                # タスクの状態を更新
+                self.update_status(
+                    task_id,
+                    TaskStatus.CANCELLED,
+                    {"message": "タスクの実行が停止されました"}
+                )
+            else:
+                print(f"[Worker] タスク {task_id} は実行中ではありません")
+        
+        except Exception as e:
+            error_msg = f"タスク停止中にエラーが発生しました: {str(e)}"
+            print(f"[Worker] {error_msg}")
+            self.update_status(task_id, TaskStatus.FAILED, {"error": error_msg})
+            raise
+    
+    def _create_execution_prompt(self, task: SubTask, context: Optional[Dict[str, Any]]) -> str:
+        """
+        タスク実行用のプロンプトを作成
+        Args:
+            task: 実行するタスク
+            context: 実行コンテキスト
+        Returns:
+            生成されたプロンプト
+        """
+        prompt = f"""
+        以下のタスクを実行してください：
+        
+        タイトル: {task.title}
+        説明: {task.description}
+        """
+        
+        if context:
+            prompt += "\n\n実行コンテキスト:"
+            for key, value in context.items():
+                prompt += f"\n{key}: {value}"
+        
+        prompt += """
+        
+        以下の形式で結果を提供してください：
+        1. 実行した処理の説明
+        2. 生成された成果物
+        3. 実行中に発生した問題（もしあれば）
+        4. 次のステップへの提案
+        """
+        
+        return prompt 

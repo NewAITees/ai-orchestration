@@ -111,118 +111,217 @@ class BaseEvaluatorAI(ABC):
 class DefaultEvaluatorAI(BaseEvaluatorAI):
     """デフォルトのEvaluator AI実装"""
     
-    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+    def __init__(self, session: Session, llm_manager: LLMManager, **kwargs) -> None:
         """
-        メッセージを処理し、応答メッセージのリストを返す
-        
+        初期化
+        Args:
+            session: 関連付けられたセッション
+            llm_manager: LLMマネージャー
+            **kwargs: 追加の設定パラメータ
+        """
+        super().__init__(session, llm_manager, **kwargs)
+    
+    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """
+        コマンドメッセージを処理
         Args:
             message: 処理するメッセージ
-            
         Returns:
             応答メッセージのリスト
         """
-        if message.type != MessageType.COMMAND:
-            return [self._create_error_message(
-                message.sender,
-                f"サポートされていないメッセージタイプ: {message.type}"
-            )]
-        
         content = message.content
         action = content.get("action")
         
         try:
             if action == "evaluate":
-                task_id = content.get("task_id")
-                if not task_id:
-                    return [self._create_error_message(
-                        message.sender,
-                        "task_idが指定されていません"
-                    )]
-                return self._handle_evaluate_task(task_id)
-            else:
-                return [self._create_error_message(
+                task_data = content.get("task")
+                result_data = content.get("result")
+                if not task_data:
+                    raise ValueError("evaluate コマンドには 'task' データが必要です")
+                
+                task = SubTask.model_validate(task_data)
+                result = TaskExecutionResult.model_validate(result_data) if result_data else None
+                evaluation = self.evaluate_task(task, result)
+                
+                return [self._create_response(
                     message.sender,
-                    f"サポートされていないアクション: {action}"
+                    {"evaluation": evaluation.model_dump()},
+                    "evaluation_completed"
+                )]
+            elif action == "suggest":
+                evaluation_data = content.get("evaluation")
+                if not evaluation_data:
+                    raise ValueError("suggest コマンドには 'evaluation' データが必要です")
+                
+                evaluation = EvaluationResult.model_validate(evaluation_data)
+                improvements = self.suggest_improvements(evaluation)
+                
+                return [self._create_response(
+                    message.sender,
+                    {"improvements": [imp.model_dump() for imp in improvements]},
+                    "suggestions_completed"
+                )]
+            else:
+                return [self._create_error_response(
+                    message.sender,
+                    f"サポートされていないアクション: {action}",
+                    "unsupported_action"
                 )]
         except Exception as e:
-            return [self._create_error_message(
+            return [self._create_error_response(
                 message.sender,
-                f"メッセージ処理中にエラーが発生しました: {str(e)}"
+                f"コマンド処理中にエラーが発生しました: {str(e)}",
+                f"{action}_failed" if action else "command_failed"
             )]
     
-    def _handle_evaluate_task(self, task_id: str) -> List[OrchestrationMessage]:
+    def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
         """
-        タスクを評価
-        
+        タスクの実行結果を評価
         Args:
-            task_id: 評価するタスクのID
-            
-        Returns:
-            応答メッセージのリスト
-        """
-        try:
-            # タスクの取得
-            task = self.session.get_subtask(task_id)
-            if not task:
-                return [self._create_error_message(
-                    Component.DIRECTOR,
-                    f"タスクが見つかりません: {task_id}"
-                )]
-            
-            # タスクの評価
-            evaluation_result = self.evaluate_task(task)
-            
-            # レスポンスメッセージを作成
-            return [self._create_message(
-                Component.DIRECTOR,
-                MessageType.RESPONSE,
-                {
-                    "action": "evaluation_completed",
-                    "task_id": task_id,
-                    "result": evaluation_result.dict()
-                }
-            )]
-        
-        except Exception as e:
-            return [self._create_error_message(
-                Component.DIRECTOR,
-                f"タスク評価中にエラーが発生しました: {str(e)}"
-            )]
-    
-    def evaluate_task(self, task: SubTask) -> EvaluationResult:
-        """
-        タスクを評価し、結果を返す
-        
-        Args:
-            task: 評価するタスク
-            
+            task: 評価対象のタスク
+            result: タスクの実行結果（オプション）
         Returns:
             評価結果
         """
         try:
-            # タスクの評価メトリクスを計算
-            metrics = EvaluationMetrics(
-                quality=0.8,
-                completeness=0.9,
-                relevance=0.85,
-                creativity=0.75,
-                technical_accuracy=0.9
+            # タスクの状態を評価中に更新
+            self.update_status(task.id, TaskStatus.REVIEWING)
+            
+            # LLMを使用してタスクを評価
+            prompt = self._create_evaluation_prompt(task, result)
+            llm_response = self.llm_manager.generate(prompt)
+            
+            # 評価結果を生成
+            evaluation = EvaluationResult(
+                task_id=task.id,
+                is_successful=True,  # LLMの応答から適切に判定する必要あり
+                score=0.8,  # LLMの応答から適切に計算する必要あり
+                feedback=llm_response,
+                metrics={
+                    "quality": 0.8,
+                    "completeness": 0.9,
+                    "efficiency": 0.7
+                }
             )
             
-            # 評価結果を作成
-            return EvaluationResult(
-                task_id=task.id,
-                is_complete=True,
-                score=0.85,
-                feedback="タスクは正常に完了し、品質基準を満たしています。"
+            # タスクの状態を更新
+            self.update_status(
+                task.id,
+                TaskStatus.REVIEW_COMPLETED,
+                {"evaluation": evaluation.model_dump()}
             )
+            
+            return evaluation
+            
         except Exception as e:
-            return EvaluationResult(
-                task_id=task.id,
-                is_complete=False,
-                score=0.0,
-                feedback=f"評価中にエラーが発生しました: {str(e)}"
-            )
+            error_msg = f"タスク評価中にエラーが発生しました: {str(e)}"
+            print(f"[Evaluator] {error_msg}")
+            self.update_status(task.id, TaskStatus.FAILED, {"error": error_msg})
+            raise
+    
+    def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
+        """
+        評価結果に基づく改善案を提案
+        Args:
+            evaluation: 評価結果
+        Returns:
+            改善案のリスト
+        """
+        try:
+            # LLMを使用して改善案を生成
+            prompt = self._create_improvement_prompt(evaluation)
+            llm_response = self.llm_manager.generate(prompt)
+            
+            # 改善案を生成（実際の実装ではLLMの応答を適切にパース）
+            improvements = [
+                Improvement(
+                    id=generate_id(prefix="improvement"),
+                    description="サンプルの改善案",
+                    priority="high",
+                    effort_estimate="medium",
+                    expected_impact="high"
+                )
+            ]
+            
+            return improvements
+            
+        except Exception as e:
+            error_msg = f"改善案生成中にエラーが発生しました: {str(e)}"
+            print(f"[Evaluator] {error_msg}")
+            raise
+    
+    def _create_evaluation_prompt(self, task: SubTask, result: Optional[TaskExecutionResult]) -> str:
+        """
+        タスク評価用のプロンプトを作成
+        Args:
+            task: 評価対象のタスク
+            result: タスクの実行結果
+        Returns:
+            生成されたプロンプト
+        """
+        prompt = f"""
+        以下のタスクとその実行結果を評価してください：
+        
+        タスク:
+        タイトル: {task.title}
+        説明: {task.description}
+        """
+        
+        if result:
+            prompt += f"""
+            
+            実行結果:
+            ステータス: {result.status}
+            出力: {result.output}
+            実行時間: {result.execution_time}
+            """
+        
+        prompt += """
+        
+        以下の観点で評価してください：
+        1. タスクの要件を満たしているか
+        2. 出力の品質
+        3. 実行効率
+        4. 改善の余地
+        
+        各観点について、1-10の数値評価と具体的なフィードバックを提供してください。
+        """
+        
+        return prompt
+    
+    def _create_improvement_prompt(self, evaluation: EvaluationResult) -> str:
+        """
+        改善案生成用のプロンプトを作成
+        Args:
+            evaluation: 評価結果
+        Returns:
+            生成されたプロンプト
+        """
+        prompt = f"""
+        以下の評価結果に基づいて、具体的な改善案を提案してください：
+        
+        タスクID: {evaluation.task_id}
+        成功: {'はい' if evaluation.is_successful else 'いいえ'}
+        スコア: {evaluation.score}
+        フィードバック: {evaluation.feedback}
+        
+        メトリクス:
+        """
+        
+        for metric, value in evaluation.metrics.items():
+            prompt += f"\n- {metric}: {value}"
+        
+        prompt += """
+        
+        以下の形式で改善案を提案してください：
+        1. 改善内容の説明
+        2. 優先度（high/medium/low）
+        3. 実装の難易度
+        4. 期待される効果
+        5. 具体的な実装手順
+        """
+        
+        return prompt
 
 class EvaluatorAI(DefaultEvaluatorAI):
     """拡張されたEvaluator AI実装"""

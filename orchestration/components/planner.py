@@ -136,131 +136,214 @@ class PlannerAI(BasePlannerAI):
 class DefaultPlannerAI(BasePlannerAI):
     """デフォルトのPlanner AI実装"""
     
-    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+    def __init__(self, session: Session, llm_manager: LLMManager, **kwargs) -> None:
         """
-        メッセージを処理し、応答メッセージのリストを返す
-        
+        初期化
+        Args:
+            session: 関連付けられたセッション
+            llm_manager: LLMマネージャー
+            **kwargs: 追加の設定パラメータ
+        """
+        super().__init__(session, llm_manager, **kwargs)
+    
+    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+        """
+        コマンドメッセージを処理
         Args:
             message: 処理するメッセージ
-            
         Returns:
             応答メッセージのリスト
         """
-        if message.type != MessageType.COMMAND:
-            return [self._create_error_message(
-                message.sender,
-                f"サポートされていないメッセージタイプ: {message.type}"
-            )]
-        
         content = message.content
         action = content.get("action")
         
         try:
-            if action == "analyze_task":
-                return self._handle_analyze_task(content.get("task", ""))
-            else:
-                return [self._create_error_message(
+            if action == "plan_task":
+                task_data = content.get("task")
+                requirements = content.get("requirements", [])
+                if not task_data:
+                    raise ValueError("plan_task コマンドには 'task' データが必要です")
+                
+                task = TaskModel.model_validate(task_data)
+                plan = self.plan_task(task, requirements)
+                
+                return [self._create_response(
                     message.sender,
-                    f"サポートされていないアクション: {action}"
+                    {"plan": plan.model_dump()},
+                    "planning_completed"
+                )]
+            elif action == "validate":
+                plan_data = content.get("plan")
+                if not plan_data:
+                    raise ValueError("validate コマンドには 'plan' データが必要です")
+                
+                plan = PlanningResult.model_validate(plan_data)
+                is_valid = self.validate_plan(plan)
+                
+                return [self._create_response(
+                    message.sender,
+                    {"is_valid": is_valid},
+                    "validation_completed"
+                )]
+            else:
+                return [self._create_error_response(
+                    message.sender,
+                    f"サポートされていないアクション: {action}",
+                    "unsupported_action"
                 )]
         except Exception as e:
-            return [self._create_error_message(
+            return [self._create_error_response(
                 message.sender,
-                f"メッセージ処理中にエラーが発生しました: {str(e)}"
+                f"コマンド処理中にエラーが発生しました: {str(e)}",
+                f"{action}_failed" if action else "command_failed"
             )]
     
-    def _handle_analyze_task(self, task: str) -> List[OrchestrationMessage]:
+    def plan_task(self, task: TaskModel, requirements: Optional[List[str]] = None) -> PlanningResult:
         """
-        タスクを分析し、サブタスクに分解
-        
+        タスクの実行計画を生成
         Args:
-            task: 分析対象のタスク
-            
+            task: 計画対象のタスク
+            requirements: 追加の要件（オプション）
         Returns:
-            応答メッセージのリスト
+            生成された実行計画
         """
         try:
-            # タスクの前処理と検証
-            if not task or len(task.strip()) == 0:
-                return [self._create_error_message(
-                    Component.DIRECTOR,
-                    "タスクが空です"
-                )]
+            # タスクの状態を計画中に更新
+            self.update_status(task.id, TaskStatus.PLANNING)
             
-            # タスク分析の実行
-            analysis_result = self.analyze_task(task)
+            # LLMを使用してタスクを分析し、サブタスクに分解
+            prompt = self._create_planning_prompt(task, requirements)
+            llm_response = self.llm_manager.generate(prompt)
             
-            # 分析結果をJSONに変換
-            result_json = analysis_result.dict()
+            # LLMの応答からサブタスクを生成
+            subtasks = self._parse_llm_response(llm_response)
             
-            # レスポンスメッセージを作成
-            return [self._create_message(
-                Component.DIRECTOR,
-                MessageType.RESPONSE,
-                {
-                    "action": "task_analyzed",
-                    "result": result_json
-                }
-            )]
-        
-        except Exception as e:
-            return [self._create_error_message(
-                Component.DIRECTOR,
-                f"タスク分析中にエラーが発生しました: {str(e)}"
-            )]
-    
-    def analyze_task(self, task: str) -> TaskAnalysisResult:
-        """
-        タスクを分析し、構造化された結果を返す
-        
-        Args:
-            task: 分析対象のタスク
-            
-        Returns:
-            分析結果
-        """
-        try:
-            # LLMを使用してタスクを分析
-            prompt = f"""
-            以下のタスクを分析し、必要な情報を抽出してください：
-            
-            タスク: {task}
-            
-            1. タスクの種類を判定
-            2. 複雑さを1-10で評価
-            3. 必要なステップ数を推定
-            4. サブタスクを特定
-            5. 要件と制約を抽出
-            """
-            
-            response = self.llm_manager.get_completion(prompt)
-            
-            # 現在はダミーの実装を提供
-            # 実際の実装では、LLMの応答を解析して適切な値を設定
-            return TaskAnalysisResult(
-                main_task=task,
-                task_type="creative_writing",
-                complexity=5,
-                estimated_steps=3,
-                subtasks=[
-                    {
-                        "title": "キャラクター設定",
-                        "description": "物語の主要キャラクターの設定を作成",
-                        "dependencies": []
-                    },
-                    {
-                        "title": "プロット作成",
-                        "description": "物語の基本的なプロットを構築",
-                        "dependencies": ["キャラクター設定"]
-                    },
-                    {
-                        "title": "本文執筆",
-                        "description": "実際の物語を執筆",
-                        "dependencies": ["プロット作成"]
-                    }
-                ],
-                requirements=["魅力的なキャラクター", "一貫したストーリー"],
-                constraints=["適切な長さ", "ターゲット読者層に適した内容"]
+            # 計画結果を作成
+            plan = PlanningResult(
+                task_id=task.id,
+                subtasks=subtasks,
+                requirements=requirements or [],
+                planning_summary=f"タスク '{task.title}' を {len(subtasks)} 個のサブタスクに分解しました"
             )
+            
+            # タスクの状態を更新
+            self.update_status(
+                task.id,
+                TaskStatus.PLANNING_COMPLETED,
+                {"plan": plan.model_dump()}
+            )
+            
+            return plan
+            
         except Exception as e:
-            raise Exception(f"タスク分析中にエラーが発生しました: {str(e)}") 
+            error_msg = f"タスク計画の生成中にエラーが発生しました: {str(e)}"
+            print(f"[Planner] {error_msg}")
+            self.update_status(task.id, TaskStatus.FAILED, {"error": error_msg})
+            raise
+    
+    def validate_plan(self, plan: PlanningResult) -> bool:
+        """
+        生成された計画の妥当性を検証
+        Args:
+            plan: 検証する計画
+        Returns:
+            計画が妥当な場合はTrue
+        """
+        try:
+            # 基本的な検証
+            if not plan.subtasks:
+                return False
+            
+            # サブタスク間の依存関係を検証
+            dependency_graph = {}
+            for subtask in plan.subtasks:
+                dependency_graph[subtask.id] = set(subtask.dependencies)
+            
+            # 循環依存のチェック
+            visited = set()
+            temp_visited = set()
+            
+            def has_cycle(task_id: str) -> bool:
+                if task_id in temp_visited:
+                    return True
+                if task_id in visited:
+                    return False
+                
+                temp_visited.add(task_id)
+                for dep in dependency_graph[task_id]:
+                    if has_cycle(dep):
+                        return True
+                temp_visited.remove(task_id)
+                visited.add(task_id)
+                return False
+            
+            for task_id in dependency_graph:
+                if has_cycle(task_id):
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            print(f"[Planner] 計画の検証中にエラーが発生しました: {e}")
+            return False
+    
+    def _create_planning_prompt(self, task: TaskModel, requirements: Optional[List[str]]) -> str:
+        """
+        タスク計画生成用のプロンプトを作成
+        Args:
+            task: 計画対象のタスク
+            requirements: 追加の要件
+        Returns:
+            生成されたプロンプト
+        """
+        prompt = f"""
+        タスク '{task.title}' の実行計画を生成してください。
+        
+        タスクの説明:
+        {task.description}
+        
+        追加の要件:
+        """
+        
+        if requirements:
+            for i, req in enumerate(requirements, 1):
+                prompt += f"\n{i}. {req}"
+        else:
+            prompt += "\n(追加の要件はありません)"
+        
+        prompt += """
+        
+        以下の形式でサブタスクを提案してください:
+        1. サブタスクのタイトル
+        2. サブタスクの説明
+        3. 依存関係（他のサブタスクへの依存）
+        4. 成功基準
+        
+        各サブタスクは独立して実行可能で、明確な目標を持つようにしてください。
+        """
+        
+        return prompt
+    
+    def _parse_llm_response(self, llm_response: str) -> List[SubTask]:
+        """
+        LLMの応答からサブタスクのリストを生成
+        Args:
+            llm_response: LLMからの応答テキスト
+        Returns:
+            生成されたサブタスクのリスト
+        """
+        # 注: 実際の実装では、LLMの応答形式に応じてより堅牢なパース処理が必要
+        # ここでは簡略化のためダミーのサブタスクを生成
+        subtasks = []
+        
+        # ダミーのサブタスク生成（実際の実装では LLM の応答を適切にパース）
+        subtask = SubTask(
+            id=generate_id(prefix="subtask"),
+            title="サンプルサブタスク",
+            description="これはサンプルのサブタスクです",
+            dependencies=[],
+            status=TaskStatus.PENDING
+        )
+        subtasks.append(subtask)
+        
+        return subtasks 
