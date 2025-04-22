@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from backend.app.api.router import api_router
 from backend.app.core.config import settings
+from .core.session import Session
+from .llm.llm_manager import LLMManager
+from .factory import AIComponentFactory
+from .cui.novel_writer import NovelWriter
 
 app = FastAPI(
     title="General AI Playground API",
@@ -56,5 +60,22 @@ def start_app():
     import uvicorn
     uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
 
+def run_novel_writer(args=None):
+    """小説作成アプリを実行"""
+    # セッション初期化
+    session = Session()
+    
+    # LLMマネージャー初期化
+    llm_manager = LLMManager()
+    
+    # コンポーネント生成
+    components = AIComponentFactory.create_orchestration_system(
+        session, llm_manager
+    )
+    
+    # 小説作成システム実行
+    writer = NovelWriter(session, components)
+    writer.run()
+
 if __name__ == "__main__":
-    start_app() 
+    run_novel_writer() 

@@ -1,13 +1,14 @@
 from typing import List, Optional, Callable, Dict
 import sys
 from dataclasses import dataclass, field
-from app.orchestration.core.session import Session, Task, TaskStatus
+from app.orchestration.core.session import Session, Task, TaskStatus, SubTask
 from app.orchestration.components.director import DefaultDirectorAI
 from app.orchestration.components.reviewer import ReviewerAI
 from app.orchestration.components.planner import DefaultPlannerAI
 from app.orchestration.components.worker import DefaultWorkerAI
 from app.llm.llm_manager import LLMManager
 from app.orchestration.core.message import OrchestrationMessage, MessageType, Component
+import uuid
 
 @dataclass
 class NovelWriterConfig:
@@ -39,137 +40,109 @@ class NovelWriterInput:
     revisions: Dict[str, List[str]] = field(default_factory=dict)  # タスクIDごとの修正内容リスト
 
 class NovelWriter:
-    def __init__(
-        self,
-        session: Session,
-        director: DefaultDirectorAI,
-        evaluator: ReviewerAI,
-        planner: DefaultPlannerAI,
-        worker: DefaultWorkerAI,
-        config: Optional[NovelWriterConfig] = None,
-        input_data: Optional[NovelWriterInput] = None,
-        input_func: Callable[[str], str] = input,
-        output_func: Callable[[str], None] = print
-    ):
+    """小説作成支援システム"""
+    
+    def __init__(self, session, components, input_func=input, output_func=print):
         self.session = session
-        self.director = director
-        self.evaluator = evaluator
-        self.planner = planner
-        self.worker = worker
-        self.config = config or NovelWriterConfig()
-        self.input_data = input_data
+        self.components = components
         self.input_func = input_func
         self.output_func = output_func
-
+        self.default_requirements = [
+            "魅力的な主人公",
+            "起承転結のある物語展開",
+            "読者を引き込む世界観"
+        ]
+        self.genres = {
+            "1": "ファンタジー",
+            "2": "SF",
+            "3": "恋愛",
+            "4": "ミステリー"
+        }
+    
     def run(self):
         """小説作成プロセスを実行"""
         self.output_func("=== 小説作成支援システム ===")
         
-        if self.input_data:
-            self._setup_project_with_input()
-        else:
-            self._setup_project_interactive()
+        # 1. プロジェクト設定
+        self._setup_project()
         
-        # タスクの生成
-        self.output_func("\n=== タスク生成 ===")
-        message = OrchestrationMessage(
-            type=MessageType.COMMAND,
-            sender=Component.DIRECTOR,
-            receiver=Component.PLANNER,
-            content={"task": "start_session"},
-            action="start_session",
-            session_id=self.session.id
-        )
-        self.director.process_message(message)
+        # 2. タスク計画
+        self.output_func("\n=== タスク計画 ===")
+        planner = self.components["planner"]
+        plan_result = planner.plan_task(self.session.id, self.session.requirements)
         
-        # タスクの実行
-        while True:
-            if not self._execute_next_task():
-                break
-
+        # 3. サブタスク追加
+        for subtask_data in plan_result["subtasks"]:
+            subtask = SubTask(
+                id=subtask_data["id"],
+                title=subtask_data["title"],
+                description=subtask_data["description"]
+            )
+            self.session.add_subtask(subtask)
+        
+        # 4. タスク実行と評価
+        self._execute_tasks()
+        
         self.output_func("\n=== 小説作成が完了しました ===")
-
-    def _setup_project_with_input(self):
-        """入力データを使用してプロジェクトを設定"""
-        self.session.title = self.input_data.title
-        self.session.genre = self.input_data.genre
-        self.session.requirements = self.input_data.requirements.copy()
-
-    def _setup_project_interactive(self):
-        """対話的にプロジェクトを設定"""
-        self.output_func("\n=== プロジェクト設定 ===")
-        title = self._get_valid_input("小説のタイトルを入力してください", lambda x: len(x.strip()) > 0)
+    
+    def _setup_project(self):
+        """プロジェクト設定"""
+        # タイトル入力
+        title = self._get_input("小説のタイトルを入力してください: ")
         self.session.title = title
         
-        genre_prompt = "ジャンルを選択してください\n"
-        for key, name in self.config.genres.items():
-            desc = self.config.genre_descriptions.get(key, "")
-            genre_prompt += f"{key}: {name} - {desc}\n"
-        genre_prompt += f"選択 (1-{len(self.config.genres)}): "
+        # ジャンル選択
+        self.output_func("\nジャンルを選択してください:")
+        for key, name in self.genres.items():
+            self.output_func(f"{key}: {name}")
         
-        genre = self._get_valid_input(
-            genre_prompt,
-            lambda x: x in self.config.genres.keys()
-        )
-        self.session.genre = self.config.genres[genre]
+        genre_key = self._get_input("選択 (1-4): ", lambda x: x in self.genres)
+        self.session.genre = self.genres[genre_key]
         
-        self._collect_requirements_interactive()
-
-    def _collect_requirements_interactive(self):
-        """対話的に要件を収集"""
-        self.output_func("\n=== 要件の収集 ===")
-        self.output_func("物語の要件を入力してください（終了する場合は空入力）")
+        # 要件収集
+        self.output_func("\n物語の要件を入力してください（終了は空入力）:")
+        requirements = []
         
         while True:
-            requirement = self.input_func("要件: ").strip()
-            if not requirement:
+            req = self.input_func("要件: ")
+            if not req:
                 break
-            self.session.requirements.append(requirement)
+            requirements.append(req)
+        
+        if not requirements:
+            self.output_func("デフォルトの要件を使用します。")
+            requirements = self.default_requirements.copy()
+        
+        self.session.requirements = requirements
+    
+    def _execute_tasks(self):
+        """タスク実行"""
+        worker = self.components["worker"]
+        evaluator = self.components["evaluator"]
+        
+        for task_id, task in self.session.subtasks.items():
+            self.output_func(f"\n=== タスク「{task.title}」を実行中... ===")
             
-        if not self.session.requirements:
-            self.output_func("要件が設定されていません。デフォルトの要件を使用します。")
-            self.session.requirements = self.config.default_requirements.copy()
-
-    def _execute_next_task(self) -> bool:
-        """次のタスクを実行"""
-        self.output_func("\n=== タスク実行 ===")
-        
-        current_tasks = [task for task in self.session.tasks if task.status != TaskStatus.COMPLETED]
-        if not current_tasks:
-            return False
+            # 実行
+            result = worker.execute_task(task)
+            task.result = result["content"]
             
-        # 自動的に最初のタスクを選択
-        selected_task = current_tasks[0]
-        
-        # タスク実行
-        self.output_func(f"\nタスク「{selected_task.title}」を実行中...")
-        result = self.worker.execute_task(selected_task)
-        
-        # 評価
-        self.output_func("\n=== 評価結果 ===")
-        evaluation = self.evaluator.evaluate_task(selected_task)
-        self.output_func(f"評価スコア: {evaluation.score}")
-        self.output_func(f"フィードバック: {evaluation.feedback}")
-        
-        # 修正の適用（入力データから）
-        if self.input_data and selected_task.id in self.input_data.revisions:
-            for revision in self.input_data.revisions[selected_task.id]:
-                selected_task.result = revision
-                new_evaluation = self.evaluator.evaluate_task(selected_task)
-                self.output_func(f"\n新しい評価スコア: {new_evaluation.score}")
-                self.output_func(f"フィードバック: {new_evaluation.feedback}")
-        
-        selected_task.status = TaskStatus.COMPLETED
-        return True
-
-    def _get_valid_input(self, prompt: str, validator: Callable[[str], bool]) -> str:
-        """有効な入力を取得"""
+            # 評価
+            evaluation = evaluator.evaluate_task(task)
+            
+            self.output_func(f"\n評価スコア: {evaluation['score']}")
+            self.output_func(f"フィードバック: {evaluation['feedback']}")
+            
+            # 完了
+            task.update_status(TaskStatus.COMPLETED)
+    
+    def _get_input(self, prompt, validator=None):
+        """入力取得"""
         while True:
-            self.output_func(prompt)
-            value = self.input_func("").strip()
-            if validator(value):
+            value = self.input_func(prompt)
+            if not validator or validator(value):
                 return value
-            self.output_func("無効な入力です。もう一度入力してください。")
+            self.output_func("無効な入力です。再入力してください。")
 
 def main():
     """メイン実行関数"""
@@ -211,11 +184,12 @@ def main():
     # 小説作成システムの実行
     writer = NovelWriter(
         session=session,
-        director=director,
-        evaluator=evaluator,
-        planner=planner,
-        worker=worker,
-        config=custom_config  # カスタム設定を使用
+        components={
+            "director": director,
+            "evaluator": evaluator,
+            "planner": planner,
+            "worker": worker
+        }
     )
     writer.run()
 

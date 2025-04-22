@@ -68,178 +68,54 @@ class TaskProgressDict(TypedDict):
     started_at: str
     estimated_completion: Optional[str]
 
-@dataclass
-class Task:
-    """タスクを表すデータクラス"""
-    id: str
-    title: str
-    description: str
-    status: TaskStatus = TaskStatus.PENDING
-    result: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
-    completed_at: Optional[datetime] = None
+class SubTask:
+    """サブタスク"""
+    def __init__(self, id: str, title: str, description: str, **kwargs):
+        self.id = id
+        self.title = title
+        self.description = description
+        self.status = kwargs.get("status", TaskStatus.PENDING)
+        self.result = kwargs.get("result")
+        self.requirements = kwargs.get("requirements", [])
+        self.created_at = datetime.now()
+        self.updated_at = datetime.now()
     
     def update_status(self, status: TaskStatus) -> None:
-        """ステータスを更新"""
+        """状態更新"""
         self.status = status
         self.updated_at = datetime.now()
-        if status == TaskStatus.COMPLETED:
-            self.completed_at = datetime.now()
 
 class Session:
-    """
-    オーケストレーションプロセス全体の実行コンテキストを管理するクラス。
-    AIコンポーネント、タスク、状態などを保持する。
-    """
-
-    def __init__(
-        self,
-        session_id: SessionID, # 型エイリアスを使用
-        llm_manager: 'BaseLLMManager',
-        factory: 'AIComponentFactory',
-        config: Optional[Dict[str, Any]] = None,
-        mode: Optional[str] = None,
-        initial_tasks: Optional[List[SubTask]] = None, # types.pyのSubTaskを使用
-    ) -> None:
-        """セッションを初期化し、必要なコンポーネントを生成する。"""
-        # CommandDispatcherは実行時に必要なので関数外で良いが、
-        # 循環参照を避けるためにTYPE_CHECKING外でインポートする
-        from ..commands import CommandDispatcher
-
-        self.id: SessionID = session_id
-        self.mode: Optional[str] = mode
-        self.llm_manager: 'BaseLLMManager' = llm_manager
-        self.factory: 'AIComponentFactory' = factory
-        self.config: Optional[Dict[str, Any]] = config
-        # datetimeオブジェクトを直接保持
-        self.created_at: datetime = datetime.now()
-        self.updated_at: datetime = datetime.now()
-        self.status: SessionStatus = SessionStatus.PENDING
-
-        # ファクトリーを使ってコンポーネント群を生成・保持
-        self.components: Dict[str, 'BaseAIComponent'] = self.factory.create_orchestration_system(
-            session=self,
-            llm_manager=self.llm_manager,
-            config=self.config
-        )
-
-        # コマンドディスパッチャーを初期化
-        self.dispatcher: 'CommandDispatcher' = CommandDispatcher(session=self)
-
-        # タスク管理用の辞書
-        self.subtasks: Dict[SubtaskID, SubTask] = {} # キーも型エイリアス使用
-
-        # 初期タスクを追加
-        if initial_tasks:
-            for task in initial_tasks:
-                self.add_subtask(task)
-
-        print(f"セッション {self.id}: 初期化完了。")
-
-    def get_component(self, component_type: str) -> Optional['BaseAIComponent']:
-        """指定されたタイプのAIコンポーネントを取得する。"""
-        component = self.components.get(component_type)
-        if component is None:
-             print(f"警告: セッション {self.id} でコンポーネント '{component_type}' が見つかりません。")
-        return component
-
+    """セッション管理"""
+    def __init__(self, id: Optional[str] = None, **kwargs):
+        self.id = id or f"session_{uuid.uuid4().hex}"
+        self.title = kwargs.get("title", "")
+        self.mode = kwargs.get("mode")
+        self.requirements = kwargs.get("requirements", [])
+        self.created_at = datetime.now()
+        self.updated_at = datetime.now()
+        self.subtasks: Dict[str, SubTask] = {}
+        self.components = {}
+    
     def add_subtask(self, task: SubTask) -> None:
-        """サブタスクをセッションに追加する。"""
-        if task.id in self.subtasks:
-            print(f"警告: セッション {self.id} のタスクID {task.id} は既に存在します。上書きします。")
+        """サブタスク追加"""
         self.subtasks[task.id] = task
         self.updated_at = datetime.now()
-        print(f"セッション {self.id}: サブタスク {task.id} ('{task.title}') を追加しました。")
-
-    def get_subtask(self, task_id: SubtaskID) -> Optional[SubTask]:
-        """指定されたIDのサブタスクを取得する。"""
-        task = self.subtasks.get(task_id)
-        if task is None:
-            print(f"セッション {self.id}: サブタスクID {task_id} が見つかりません。")
-        return task
-
-    def update_session_status(self, status: SessionStatus) -> None:
-        """セッション全体のステータスを更新する。"""
-        self.status = status
-        self.updated_at = datetime.now()
-        print(f"セッション {self.id}: ステータスを {status.value} に更新しました。")
-
-    def update_task_status(self, task_id: SubtaskID, status: SubtaskStatus) -> None: # SubtaskStatusを使用
-        """指定されたサブタスクのステータスを更新する。"""
+    
+    def get_subtask(self, task_id: str) -> Optional[SubTask]:
+        """サブタスク取得"""
+        return self.subtasks.get(task_id)
+    
+    def update_task_status(self, task_id: str, status: TaskStatus) -> None:
+        """タスク状態更新"""
         task = self.get_subtask(task_id)
         if task:
-            # types.py の SubTask に update_status があると仮定
-            if hasattr(task, 'update_status'):
-                 task.update_status(status) # SubTaskオブジェクトのメソッドを呼ぶ
-                 task.updated_at = datetime.now() # updated_atも更新
-            else:
-                 # update_statusがない場合は直接代入（ただし、これだとupdated_atが更新されない）
-                 print(f"警告: SubTaskにupdate_statusメソッドがありません。statusを直接更新します。")
-                 task.status = status
-            self.updated_at = datetime.now() # セッション自体のupdated_atも更新
-            print(f"セッション {self.id}: タスク {task_id} のステータスを {status.value} に更新しました。")
-        else:
-            print(f"警告: セッション {self.id} でタスクID {task_id} が見つかりません。ステータス更新をスキップします。")
-
-    def to_dict(self) -> Dict[str, Any]:
-        """セッションの状態をシリアライズ可能な辞書に変換する。"""
-        # Pydantic V2 スタイル: model_dump() を使用
-        subtasks_dict = {
-            tid: task.model_dump(mode='json')  # mode='json'でdatetimeをISO文字列に
-            for tid, task in self.subtasks.items()
-        }
-        return {
-            "id": self.id,
-            "mode": self.mode,
-            "status": self.status.value,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-            "subtasks": subtasks_dict,
-            "config": self.config
-        }
-
-    @classmethod
-    def from_dict(
-        cls,
-        data: Dict[str, Any],
-        llm_manager: 'BaseLLMManager',
-        factory: 'AIComponentFactory'
-    ) -> 'Session':
-        """辞書からセッションオブジェクトを復元する。"""
-        session_id = data['id']
-        mode = data.get('mode')
-        config = data.get('config')
-        status = SessionStatus(data.get('status', SessionStatus.PENDING.value))
-        created_at = datetime.fromisoformat(data['created_at'])
-        updated_at = datetime.fromisoformat(data['updated_at'])
-
-        # 基本情報でSessionインスタンスを作成
-        session = cls(
-            session_id=session_id,
-            llm_manager=llm_manager,
-            factory=factory,
-            config=config,
-            mode=mode
-        )
-        session.status = status
-        session.created_at = created_at
-        session.updated_at = updated_at
-
-        # サブタスクを復元
-        subtasks_data = data.get("subtasks", {})
-        for task_id, task_data in subtasks_data.items():
-            try:
-                # Pydantic V2 スタイル: model_validate() を使用
-                task = SubTask.model_validate(task_data)
-                session.subtasks[task_id] = task
-            except ValidationError as e:
-                print(f"警告: セッション {session_id} のタスク {task_id} の復元中にバリデーションエラー: {e}")
-            except Exception as e:
-                print(f"警告: セッション {session_id} のタスク {task_id} の復元中に予期せぬエラー: {e}")
-
-        print(f"セッション {session_id} を辞書から復元しました。")
-        return session
+            task.update_status(status)
+            self.updated_at = datetime.now()
+    
+    def get_component(self, component_type: str):
+        """コンポーネント取得"""
+        return self.components.get(component_type)
 
 class SessionManager:
     """セッションの永続化と管理を行うクラス（シングルトン）"""

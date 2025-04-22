@@ -53,53 +53,36 @@ class PlannerAI(BaseAIComponent):
 
         return subtasks
 
-    def plan_task(self, task: TaskModel, requirements: List[str] = None) -> Any:
-        """
-        与えられたメインタスクと要件に基づいて実行計画（サブタスクリストなど）を作成する。
-        """
-        print(f"[Planner] Planning task: {task.id} - '{task.title}'")
-        if requirements:
-             print(f"[Planner] with requirements: {requirements}")
-
-        # 1. Analyze requirements (could call self.analyze_requirements or have integrated logic)
-        # Example: Use LLM to break down the main task based on description and requirements
-        prompt = f"Break down the following task into smaller, manageable subtasks:\n"
-        prompt += f"Main Task ID: {task.id}\n"
-        prompt += f"Title: {task.title}\n"
-        prompt += f"Description: {task.description}\n"
-        if requirements:
-             prompt += f"Requirements: {', '.join(requirements)}\n"
-        prompt += "Provide the subtasks as a list of JSON objects, each with 'id', 'title', 'description', and 'dependencies' (list of IDs)."
-
-        try:
-            # Use the LLM manager provided by the base class
-            print(f"[Planner] Sending planning request to LLM for task {task.id}")
-            llm_response = self.llm_manager.generate(prompt) # Assuming generate method exists
-            print(f"[Planner] Received LLM response for planning task {task.id}")
-
-            # 2. Parse LLM response to create SubTask objects
-            # This part needs robust parsing and error handling
-            # plan_result = self._parse_llm_plan(llm_response)
-            # Dummy plan result for now
-            plan_result = {
-                 "subtasks": [
-                     {"id": f"{task.id}-sub1", "title": "Subtask 1", "description": "First step", "dependencies": []},
-                     {"id": f"{task.id}-sub2", "title": "Subtask 2", "description": "Second step", "dependencies": [f"{task.id}-sub1"]}
-                 ],
-                 "planning_summary": "Generated a two-step plan."
+    def plan_task(self, task_id: str, requirements: List[str] = None) -> Dict[str, Any]:
+        """タスク計画作成"""
+        task = self.session.get_subtask(task_id)
+        requirements = requirements or (task.requirements if task else [])
+        
+        # LLMを使用したタスク分解
+        if self.llm_manager:
+            prompt = f"""
+            タスクを分解してください:
+            タスクID: {task_id}
+            タスク: {task.title if task else 'メインタスク'}
+            説明: {task.description if task else ''}
+            要件: {', '.join(requirements)}
+            
+            サブタスクのリストを作成してください。
+            """
+            # 実際のLLM呼び出しはここで行う
+        
+        # サンプルの計画（実際はLLMの出力を解析して生成）
+        subtasks = [
+            {"id": f"{task_id}-sub1", "title": "サブタスク1", "description": "最初のステップ"},
+            {"id": f"{task_id}-sub2", "title": "サブタスク2", "description": "次のステップ"}
+        ]
+        
+        return {
+            "subtasks": subtasks,
+            "dependencies": {
+                f"{task_id}-sub2": [f"{task_id}-sub1"]
             }
-            print(f"[Planner] Plan created for task {task.id}: {plan_result.get('planning_summary')}")
-
-            # Maybe create SubTask objects from plan_result["subtasks"] here?
-            # subtask_objects = [SubTask.model_validate(st_data) for st_data in plan_result["subtasks"]]
-            # It might be better for the command/caller to handle subtask creation/addition to session
-
-            return plan_result # Return the structured plan
-
-        except Exception as e:
-            print(f"Error during LLM call or plan parsing for task {task.id}: {e}")
-            # Return an error structure or raise exception
-            return {"error": f"Planning failed: {e}", "subtasks": []}
+        }
 
     def validate_solution(self, solution: Any) -> bool:
         """
@@ -143,22 +126,22 @@ class DefaultPlannerAI(BaseAIComponent):
         action = content.get("action")
         
         try:
-            if action == "plan":
-                task_data = content.get("task")
-                if not task_data:
+            if action == "plan_task":
+                task_id = content.get("task_id")
+                if not task_id:
                     return [self._create_error_response(
                         message.sender,
-                        "plan コマンドには 'task' データが必要です",
-                        "invalid_command"
+                        "task_id が指定されていません"
                     )]
                 
-                task = Task.model_validate(task_data)
-                plan = self.create_plan(task)
+                # タスク計画作成
+                requirements = content.get("requirements", [])
+                plan = self.plan_task(task_id, requirements)
                 
                 return [self._create_response(
                     message.sender,
-                    {"plan": plan.model_dump()},
-                    "plan_created"
+                    {"plan": plan},
+                    "task_planned"
                 )]
             elif action == "revise":
                 plan_data = content.get("plan")

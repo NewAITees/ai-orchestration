@@ -78,24 +78,16 @@ class AIComponentFactory:
         Returns:
             コンポーネント名をキーとする生成済みコンポーネントの辞書
         """
-        # Initialize an empty dictionary to hold the created components
-        created_components: Dict[str, BaseAIComponent] = {}
+        config = config or {}
         
-        # Define the standard set of components to create
-        component_types_to_create = ["director", "planner", "worker", "evaluator"] # Add "reviewer" if needed
+        components = {
+            "director": DirectorAI(session, llm_manager),
+            "planner": PlannerAI(session, llm_manager),
+            "worker": WorkerAI(session, llm_manager),
+            "evaluator": EvaluatorAI(session, llm_manager)
+        }
         
-        # Iterate through the required component types
-        for component_type in component_types_to_create:
-            # Extract the specific configuration for this component type, if available
-            component_config = config.get(component_type) if config else None
-            
-            # Use the create_component method to instantiate the component
-            created_components[component_type] = AIComponentFactory.create_component(
-                component_type=component_type, 
-                session=session, 
-                llm_manager=llm_manager, 
-                config=component_config
-            )
-            
-        # Return the dictionary containing all created components
-        return created_components 
+        # セッションにコンポーネントを設定
+        session.components = components
+        
+        return components 

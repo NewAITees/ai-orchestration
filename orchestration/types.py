@@ -183,6 +183,7 @@ class MessageType(str, Enum):
     ERROR = "error"
     STATUS = "status"
     FEEDBACK = "feedback"
+    QUERY = "query"
 
 
 class Component(str, Enum):
@@ -207,6 +208,7 @@ class TaskModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
+    requirements: List[str] = Field(default_factory=list)
 
     model_config = ConfigDict(
         from_attributes=True,  # Allow ORM mode
@@ -242,7 +244,6 @@ class MessageModel(BaseModel):
     content: Dict[str, Any]
     session_id: str
     action: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 # AI Component Interfaces and Base Classes

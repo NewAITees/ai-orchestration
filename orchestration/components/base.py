@@ -35,27 +35,15 @@ class AIComponentProtocol(Protocol):
 # --- 基底クラス ---
 class BaseAIComponent(ABC):
     """全AIコンポーネントの共通基底クラス"""
+    component_type: Component  # サブクラスで設定
     
-    def __init__(self, session: 'Session', llm_manager: 'BaseLLMManager', **kwargs) -> None:
-        """
-        基底クラスの初期化
-        Args:
-            session: 関連付けられたセッション
-            llm_manager: LLMマネージャー
-            **kwargs: 追加の設定パラメータ
-        """
+    def __init__(self, session, llm_manager=None):
+        """初期化"""
         self.session = session
         self.llm_manager = llm_manager
-        self.component_status: Dict[TaskID, TaskStatusModel] = {}
-    
+        
     def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
-        """
-        メッセージを処理し、応答メッセージのリストを返す
-        Args:
-            message: 処理するメッセージ
-        Returns:
-            応答メッセージのリスト
-        """
+        """メッセージ処理 - 統一インターフェース"""
         try:
             if message.type == MessageType.COMMAND:
                 return self._process_command(message)
@@ -63,112 +51,42 @@ class BaseAIComponent(ABC):
                 return self._process_query(message)
             else:
                 return [self._create_error_response(
-                    message.sender,
-                    f"未対応のメッセージタイプ: {message.type}",
-                    "unsupported_message_type"
+                    message.sender, 
+                    f"未対応のメッセージタイプ: {message.type}"
                 )]
         except Exception as e:
-            error_msg = f"メッセージ処理中にエラーが発生しました: {str(e)}"
-            print(f"[{self.component_type}] {error_msg}")
             return [self._create_error_response(
-                message.sender,
-                error_msg,
-                "message_processing_error"
+                message.sender, 
+                f"処理中にエラーが発生しました: {str(e)}"
             )]
-    
-    def get_status(self, task_id: TaskID) -> Optional[TaskStatusModel]:
-        """
-        タスクの状態を取得
-        Args:
-            task_id: 対象タスクのID
-        Returns:
-            タスクの状態情報、存在しない場合はNone
-        """
-        return self.component_status.get(task_id)
-    
-    def update_status(self, task_id: TaskID, status: TaskStatus, metadata: Optional[Dict[str, Any]] = None) -> None:
-        """
-        タスクの状態を更新
-        Args:
-            task_id: 対象タスクのID
-            status: 新しい状態
-            metadata: 追加のメタデータ
-        """
-        try:
-            current = self.component_status.get(task_id, TaskStatusModel(task_id=task_id))
-            current.status = status
-            if metadata:
-                current.metadata.update(metadata)
-            self.component_status[task_id] = current
-            # セッションの状態も更新
-            self.session.update_task_status(task_id, status)
-            print(f"[{self.component_type}] タスク {task_id} の状態を {status} に更新しました")
-        except Exception as e:
-            error_msg = f"状態更新中にエラーが発生しました: {str(e)}"
-            print(f"[{self.component_type}] {error_msg}")
-            raise
     
     @abstractmethod
     def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
-        """コマンドメッセージの処理（サブクラスで実装）"""
+        """コマンド処理（サブクラスで実装）"""
         pass
     
     def _process_query(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
-        """
-        クエリメッセージの処理
-        Args:
-            message: 処理するクエリメッセージ
-        Returns:
-            応答メッセージのリスト
-        """
+        """クエリ処理 - デフォルト実装"""
         content = message.content
         query_type = content.get("query_type")
         
-        try:
-            if query_type == "status":
-                task_id = content.get("task_id")
-                if not task_id:
-                    return [self._create_error_response(
-                        message.sender,
-                        "task_id が指定されていません",
-                        "invalid_query"
-                    )]
-                status = self.get_status(task_id)
-                return [self._create_response(
-                    message.sender,
-                    {"status": status.model_dump() if status else None},
-                    "status_query_response"
-                )]
-            else:
-                return [self._create_error_response(
-                    message.sender,
-                    f"未対応のクエリタイプ: {query_type}",
-                    "unsupported_query_type"
-                )]
-        except Exception as e:
-            error_msg = f"クエリ処理中にエラーが発生しました: {str(e)}"
-            print(f"[{self.component_type}] {error_msg}")
+        if query_type == "status":
+            task_id = content.get("task_id")
+            # 実装省略
+            return [self._create_response(
+                message.sender,
+                {"status": "unknown"},
+                "status_query_response"
+            )]
+        else:
             return [self._create_error_response(
                 message.sender,
-                error_msg,
-                "query_processing_error"
+                f"未対応のクエリタイプ: {query_type}"
             )]
     
-    def _create_response(
-        self,
-        receiver: Component,
-        content: Dict[str, Any],
-        action: str
-    ) -> OrchestrationMessage:
-        """
-        応答メッセージを作成
-        Args:
-            receiver: メッセージの受信者
-            content: メッセージの内容
-            action: アクション名
-        Returns:
-            作成されたメッセージ
-        """
+    def _create_response(self, receiver: Component, content: Dict[str, Any], 
+                         action: str) -> OrchestrationMessage:
+        """応答メッセージを作成"""
         return OrchestrationMessage(
             type=MessageType.RESPONSE,
             sender=self.component_type,
@@ -178,28 +96,15 @@ class BaseAIComponent(ABC):
             action=action
         )
     
-    def _create_error_response(
-        self,
-        receiver: Component,
-        error_message: str,
-        action: str = "error"
-    ) -> OrchestrationMessage:
-        """
-        エラーメッセージを作成
-        Args:
-            receiver: メッセージの受信者
-            error_message: エラーメッセージ
-            action: アクション名
-        Returns:
-            作成されたエラーメッセージ
-        """
+    def _create_error_response(self, receiver: Component, 
+                              error_message: str) -> OrchestrationMessage:
+        """エラーメッセージを作成"""
         return OrchestrationMessage(
             type=MessageType.ERROR,
             sender=self.component_type,
             receiver=receiver,
             content={"status": "failure", "error": error_message},
-            session_id=self.session.id,
-            action=action
+            session_id=self.session.id
         )
 
 # --- 各コンポーネントの基底クラスとプロトコル (Director, Planner, Worker, Reviewer) ---
