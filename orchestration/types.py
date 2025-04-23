@@ -4,7 +4,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from abc import ABC, abstractmethod
 
-
 class OrchestratorMode(str, Enum):
     """オーケストレーションモード"""
     CREATIVE = "creative"  # 創作モード
@@ -246,6 +245,211 @@ class MessageModel(BaseModel):
     action: Optional[str] = None
 
 
+class TaskExecutionResult(BaseModel):
+    """タスク実行結果を表すモデル"""
+    task_id: str
+    status: TaskStatus
+    result: Dict[str, Any]
+    feedback: Optional[str] = None
+    metrics: Optional[Dict[str, float]] = None
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class SubTask(BaseModel):
+    """サブタスクの基本モデル"""
+    id: str
+    title: str
+    description: str
+    status: SubtaskStatus = SubtaskStatus.PENDING
+    result: Optional[Dict[str, Any]] = None
+    requirements: Optional[List[str]] = None
+    constraints: Optional[List[str]] = None
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    completed_at: Optional[datetime] = None
+
+    def update_status(self, status: SubtaskStatus) -> None:
+        """タスクの状態を更新する"""
+        self.status = status
+        self.updated_at = datetime.now()
+
+
+class OrchestrationMessage(BaseModel):
+    """オーケストレーションメッセージの基本モデル"""
+    type: MessageType
+    sender: Component
+    receiver: Component
+    content: Dict[str, Any]
+    session_id: str
+    action: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class TaskAnalysisResult(BaseModel):
+    """タスク分析結果のモデル"""
+    
+    main_task: str = Field(..., description="分析対象のメインタスク")
+    task_type: str = Field(..., description="タスクのタイプ")
+    complexity: int = Field(ge=1, le=10, description="タスクの複雑さ (1-10)")
+    estimated_steps: int = Field(..., description="推定されるステップ数")
+    subtasks: List[Dict[str, Any]] = Field(..., description="サブタスクのリスト")
+    requirements: List[str] = Field(default_factory=list, description="タスクの要件")
+    constraints: List[str] = Field(default_factory=list, description="タスクの制約")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "main_task": "小説の執筆",
+                    "task_type": "creative_writing",
+                    "complexity": 8,
+                    "estimated_steps": 5,
+                    "subtasks": [
+                        {"id": "plot", "title": "プロット作成"},
+                        {"id": "characters", "title": "キャラクター設定"}
+                    ],
+                    "requirements": ["3000文字以上", "SF要素を含む"],
+                    "constraints": ["暴力的な表現を避ける"]
+                }
+            ]
+        }
+    )
+
+class ReviewResult(BaseModel):
+    """レビュー結果のモデル"""
+    
+    task_id: str = Field(..., description="タスクの一意な識別子")
+    status: str = Field(..., description="レビューの状態")
+    score: float = Field(..., description="タスクの評価スコア")
+    feedback: str = Field(..., description="タスクに関するフィードバック")
+    suggestions: List[str] = Field(default_factory=list, description="改善提案のリスト")
+    metrics: Dict[str, float] = Field(default_factory=dict, description="評価指標")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "task_id": "task_123",
+                    "status": "reviewed",
+                    "score": 8.5,
+                    "feedback": "全体的に良好な出力です。",
+                    "suggestions": ["文章の簡潔さを改善", "具体例の追加"],
+                    "metrics": {
+                        "readability": 0.85,
+                        "coherence": 0.92,
+                        "creativity": 0.78
+                    }
+                }
+            ]
+        }
+    ) 
+
+class PlanningResult(BaseModel):
+    """計画結果のモデル"""
+    
+    task_id: str = Field(..., description="タスクの一意な識別子")
+    subtasks: List[Dict[str, Any]] = Field(..., description="計画されたサブタスクのリスト")
+    dependencies: Dict[str, List[str]] = Field(default_factory=dict, description="サブタスク間の依存関係")
+    estimated_duration: Dict[str, float] = Field(default_factory=dict, description="各サブタスクの推定所要時間")
+    resource_requirements: Dict[str, List[str]] = Field(default_factory=dict, description="各サブタスクのリソース要件")
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "task_id": "task_123",
+                    "subtasks": [
+                        {"id": "subtask_1", "title": "要件分析", "description": "タスクの要件を詳細に分析する"},
+                        {"id": "subtask_2", "title": "設計", "description": "システム設計を行う"}
+                    ],
+                    "dependencies": {
+                        "subtask_2": ["subtask_1"]
+                    },
+                    "estimated_duration": {
+                        "subtask_1": 2.0,
+                        "subtask_2": 3.0
+                    },
+                    "resource_requirements": {
+                        "subtask_1": ["分析ツール"],
+                        "subtask_2": ["設計ツール", "ドキュメントテンプレート"]
+                    }
+                }
+            ]
+        }
+    )
+
+class Improvement(BaseModel):
+    """改善提案のモデル"""
+    
+    id: str = Field(..., description="改善提案の一意な識別子")
+    title: str = Field(..., description="改善提案のタイトル")
+    description: str = Field(..., description="改善提案の詳細な説明")
+    priority: int = Field(default=1, ge=1, le=5, description="優先度（1-5）")
+    impact: float = Field(default=0.0, ge=0.0, le=1.0, description="予想される改善効果（0-1）")
+    effort: float = Field(default=0.0, ge=0.0, le=1.0, description="必要な労力（0-1）")
+    status: str = Field(default="proposed", description="改善提案の状態")
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "id": "imp_123",
+                    "title": "パフォーマンス最適化",
+                    "description": "データベースクエリの最適化による応答時間の改善",
+                    "priority": 4,
+                    "impact": 0.8,
+                    "effort": 0.6,
+                    "status": "proposed"
+                }
+            ]
+        }
+    )
+
+class FinalResult(BaseModel):
+    """最終結果のモデル"""
+    
+    task_id: str = Field(..., description="タスクの一意な識別子")
+    status: TaskStatus = Field(..., description="タスクの最終状態")
+    result: Dict[str, Any] = Field(..., description="タスクの最終結果")
+    metrics: Dict[str, float] = Field(default_factory=dict, description="評価指標")
+    improvements: List[Improvement] = Field(default_factory=list, description="改善提案のリスト")
+    completed_at: datetime = Field(default_factory=datetime.now)
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "task_id": "task_123",
+                    "status": TaskStatus.COMPLETED,
+                    "result": {
+                        "output": "タスク完了の出力結果",
+                        "artifacts": ["file1.txt", "file2.json"]
+                    },
+                    "metrics": {
+                        "accuracy": 0.95,
+                        "completion_time": 120.5
+                    },
+                    "improvements": []
+                }
+            ]
+        }
+    )
+
+
+
+
+
 # AI Component Interfaces and Base Classes
 @runtime_checkable
 class IDirectorAI(Protocol):
@@ -361,106 +565,3 @@ class BaseAIComponent(ABC):
             MessageType.ERROR,
             {"error": error_message}
         )
-
-class TaskExecutionResult(BaseModel):
-    """タスク実行結果を表すモデル"""
-    task_id: str
-    status: TaskStatus
-    result: Dict[str, Any]
-    feedback: Optional[str] = None
-    metrics: Optional[Dict[str, float]] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-
-
-class SubTask(BaseModel):
-    """サブタスクの基本モデル"""
-    id: str
-    title: str
-    description: str
-    status: SubtaskStatus = SubtaskStatus.PENDING
-    result: Optional[Dict[str, Any]] = None
-    requirements: Optional[List[str]] = None
-    constraints: Optional[List[str]] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-    completed_at: Optional[datetime] = None
-
-    def update_status(self, status: SubtaskStatus) -> None:
-        """タスクの状態を更新する"""
-        self.status = status
-        self.updated_at = datetime.now()
-
-
-class OrchestrationMessage(BaseModel):
-    """オーケストレーションメッセージの基本モデル"""
-    type: MessageType
-    sender: Component
-    receiver: Component
-    content: Dict[str, Any]
-    session_id: str
-    action: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
-
-
-class TaskAnalysisResult(BaseModel):
-    """タスク分析結果のモデル"""
-    
-    main_task: str = Field(..., description="分析対象のメインタスク")
-    task_type: str = Field(..., description="タスクのタイプ")
-    complexity: int = Field(ge=1, le=10, description="タスクの複雑さ (1-10)")
-    estimated_steps: int = Field(..., description="推定されるステップ数")
-    subtasks: List[Dict[str, Any]] = Field(..., description="サブタスクのリスト")
-    requirements: List[str] = Field(default_factory=list, description="タスクの要件")
-    constraints: List[str] = Field(default_factory=list, description="タスクの制約")
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        validate_assignment=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "main_task": "小説の執筆",
-                    "task_type": "creative_writing",
-                    "complexity": 8,
-                    "estimated_steps": 5,
-                    "subtasks": [
-                        {"id": "plot", "title": "プロット作成"},
-                        {"id": "characters", "title": "キャラクター設定"}
-                    ],
-                    "requirements": ["3000文字以上", "SF要素を含む"],
-                    "constraints": ["暴力的な表現を避ける"]
-                }
-            ]
-        }
-    )
-
-class ReviewResult(BaseModel):
-    """レビュー結果のモデル"""
-    
-    task_id: str = Field(..., description="タスクの一意な識別子")
-    status: str = Field(..., description="レビューの状態")
-    score: float = Field(..., description="タスクの評価スコア")
-    feedback: str = Field(..., description="タスクに関するフィードバック")
-    suggestions: List[str] = Field(default_factory=list, description="改善提案のリスト")
-    metrics: Dict[str, float] = Field(default_factory=dict, description="評価指標")
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        validate_assignment=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "task_id": "task_123",
-                    "status": "reviewed",
-                    "score": 8.5,
-                    "feedback": "全体的に良好な出力です。",
-                    "suggestions": ["文章の簡潔さを改善", "具体例の追加"],
-                    "metrics": {
-                        "readability": 0.85,
-                        "coherence": 0.92,
-                        "creativity": 0.78
-                    }
-                }
-            ]
-        }
-    ) 

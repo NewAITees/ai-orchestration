@@ -9,7 +9,7 @@ from pathlib import Path
 from ..types import (
     TaskStatus, TaskModel, TaskStatusModel, SubtaskStatus,
     TaskID, SubtaskID, SessionID, FeedbackID, ModelName,
-    SessionStatus, SubTask
+    SubTask
 )
 
 # --- 共通ユーティリティと型定義のインポート ---

@@ -191,95 +191,27 @@ class BaseWorkerAI(BaseAIComponent):
 
 # Reviewer AI (Evaluator と同一視する提案だったが、ここでは Reviewer として残す)
 # もし Evaluator に統一する場合は、このクラスは削除し、BaseEvaluatorAI を修正する
+@runtime_checkable
 class ReviewerProtocol(AIComponentProtocol, Protocol):
     """Reviewer AIのインターフェース"""
-    def evaluate_solution(self, solution: Any, task: Optional[SubTask] = None) -> Dict[str, Any]:
+    def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
+        """タスクの評価を実行"""
         pass
-    def suggest_improvements(self, evaluation_result: Dict[str, Any]) -> List[str]:
+    
+    def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
+        """改善提案を生成"""
         pass
 
 class BaseReviewerAI(BaseAIComponent):
-    """Reviewer AIの基本実装"""
-    
-    def _get_component_type(self) -> Component:
-        return Component.REVIEWER
-    
-    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
-        """メッセージ処理 (旧式)"""
-        self.update_last_used()
-        print(f"[Reviewer] Received message: Type={message.type.value}, Action={message.action}, From={message.sender.value}")
-        if message.type == MessageType.COMMAND:
-            return self._process_command(message)
-        else:
-            print(f"[Reviewer] Unsupported message type: {message.type.value}")
-            return [self._create_error_response(
-                message.sender,
-                f"不明なメッセージタイプ: {message.type.value}",
-                action="unsupported_type"
-            )]
-    
-    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
-        """コマンドメッセージの処理 (旧式)"""
-        action = message.content.get("action")
-        try:
-            if action == "evaluate":
-                solution = message.content.get("solution")
-                task_data = message.content.get("task")
-                task = SubTask.model_validate(task_data) if task_data else None
-                print(f"[Reviewer] Evaluating solution for task {task.id if task else 'N/A'}: {solution}")
-                evaluation = self.evaluate_solution(solution, task)
-                return [self._create_response(
-                    message.sender,
-                    {"evaluation": evaluation},
-                    "evaluation_completed"
-                )]
-            elif action == "suggest":
-                evaluation_result = message.content.get("evaluation")
-                if not evaluation_result:
-                    raise ValueError("suggest コマンドには 'evaluation' データが必要です。")
-                print(f"[Reviewer] Suggesting improvements based on evaluation: {evaluation_result}")
-                improvements = self.suggest_improvements(evaluation_result)
-                return [self._create_response(
-                    message.sender,
-                    {"improvements": improvements},
-                    "suggestions_completed"
-                )]
-            else:
-                print(f"[Reviewer] Unknown command action: {action}")
-                return [self._create_error_response(
-                    message.sender,
-                    f"不明なコマンドアクション: {action}",
-                    action="unknown_command"
-                )]
-        except Exception as e:
-            error_msg = f"コマンド処理中にエラー発生 (Action: {action}): {e}"
-            print(f"[Reviewer] {error_msg}")
-            return [self._create_error_response(
-                message.sender,
-                error_msg,
-                action=f"{action}_failed" if action else "command_failed"
-            )]
-    
-    @abstractmethod
-    def evaluate_solution(self, solution: Any, task: Optional[SubTask] = None) -> Dict[str, Any]:
-        """ソリューション評価の基本実装"""
-        pass
-    
-    @abstractmethod
-    def suggest_improvements(self, evaluation_result: Dict[str, Any]) -> List[str]:
-        """改善提案の基本実装"""
-        pass
-
-class BaseEvaluatorAI(BaseAIComponent):
-    """Evaluator AIの基本実装 (ReviewerとEvaluatorを統合)"""
-    component_type = Component.EVALUATOR
+    """Reviewer AIの基本実装（EvaluatorとReviewerを統合）"""
+    component_type = Component.REVIEWER
     
     @abstractmethod
     def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
-        """タスクの実行結果を評価"""
+        """タスク評価の基本実装"""
         pass
     
     @abstractmethod
     def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
-        """評価結果に基づく改善案を提案"""
+        """改善提案生成の基本実装"""
         pass 
