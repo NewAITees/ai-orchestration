@@ -52,3 +52,7 @@ poetry.lock
 .coverage
 htmlcov/
 .pytest_cache/ 
+
+
+.txt
+
