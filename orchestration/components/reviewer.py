@@ -1,4 +1,5 @@
-from typing import Dict, Any, List, Optional
+import logging
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum, auto
@@ -11,9 +12,8 @@ from ..types import (
     ReviewResult, IReviewerAI, BaseAIComponent,
     SubTask, TaskStatus, TaskExecutionResult
 )
-from ..utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class TaskType(Enum):
     """タスクタイプの定義"""

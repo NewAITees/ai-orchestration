@@ -15,8 +15,7 @@ from agno.agent import Agent
 from agno.models.ollama import Ollama
 from agno.media import Image
 
-from orchestration.utils.debug_module import Debugger
-from orchestration.config import settings
+from .config import settings
 
 class AgnoClient:
     """

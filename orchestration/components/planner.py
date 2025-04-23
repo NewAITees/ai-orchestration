@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from ..core.message import OrchestrationMessage, MessageType, Component
 from ..core.session import Session
-from .llm_manager import LLMManager
+from ..llm.llm_manager import LLMManager
 from ..types import (
     TaskModel, TaskAnalysisResult, IPlannerAI,
     BaseAIComponent, SubTask
