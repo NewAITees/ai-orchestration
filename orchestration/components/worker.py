@@ -12,7 +12,7 @@ import asyncio
 
 from ..types import (
     TaskStatus, TaskExecutionResult, SubTask, 
-    WorkerProtocol, BaseAIComponent, Component,
+    IWorkerAI, BaseAIComponent, Component,
     MessageType, OrchestrationMessage
 )
 from ..llm.llm_manager import LLMManager
@@ -33,16 +33,22 @@ class WorkerAI(BaseAIComponent):
         super().__init__(session)
         self.llm_manager = llm_manager
     
-    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
         """
-        コマンドメッセージを処理
+        メッセージを処理し、応答メッセージのリストを返す
         
         Args:
-            message: 処理するコマンドメッセージ
+            message: 処理するメッセージ
             
         Returns:
             応答メッセージのリスト
         """
+        if message.type != MessageType.COMMAND:
+            return [self._create_error_message(
+                message.sender,
+                f"サポートされていないメッセージタイプ: {message.type}"
+            )]
+        
         content = message.content
         action = content.get("action")
         
@@ -50,7 +56,7 @@ class WorkerAI(BaseAIComponent):
             if action == "execute_task":
                 task_id = content.get("task_id")
                 if not task_id:
-                    return [self._create_error_response(
+                    return [self._create_error_message(
                         message.sender,
                         "task_id が指定されていません"
                     )]
@@ -58,7 +64,7 @@ class WorkerAI(BaseAIComponent):
                 # タスク実行
                 task = self.session.get_subtask(task_id)
                 if not task:
-                    return [self._create_error_response(
+                    return [self._create_error_message(
                         message.sender,
                         f"タスクが見つかりません: {task_id}"
                     )]
@@ -79,15 +85,15 @@ class WorkerAI(BaseAIComponent):
                 )
                 
                 # 結果をレスポンスに変換
-                return [self._create_response(
+                return [self._create_message(
                     message.sender,
-                    {"result": result.model_dump() if hasattr(result, 'model_dump') else result},
-                    "task_executed"
+                    MessageType.RESPONSE,
+                    {"result": result.model_dump() if hasattr(result, 'model_dump') else result}
                 )]
             elif action == "stop_execution":
                 task_id = content.get("task_id")
                 if not task_id:
-                    return [self._create_error_response(
+                    return [self._create_error_message(
                         message.sender,
                         "task_id が指定されていません"
                     )]
@@ -95,19 +101,19 @@ class WorkerAI(BaseAIComponent):
                 # 実行停止
                 self.stop_execution(task_id)
                 
-                return [self._create_response(
+                return [self._create_message(
                     message.sender,
-                    {"task_id": task_id, "status": "stopped"},
-                    "execution_stopped"
+                    MessageType.RESPONSE,
+                    {"task_id": task_id, "status": "stopped"}
                 )]
             else:
-                return [self._create_error_response(
+                return [self._create_error_message(
                     message.sender,
                     f"未対応のアクション: {action}"
                 )]
         except Exception as e:
             traceback.print_exc()
-            return [self._create_error_response(
+            return [self._create_error_message(
                 message.sender,
                 f"コマンド処理中にエラーが発生しました: {str(e)}"
             )]

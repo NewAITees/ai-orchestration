@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from pathlib import Path
 
 from orchestration.llm.llm_manager import LLMManager
-from orchestration.components.worker import DefaultWorkerAI
+from orchestration.components.worker import WorkerAI
 from orchestration.core.session import Session, SubTask
 
 async def test_worker_task_execution():
@@ -28,7 +28,7 @@ async def test_worker_task_execution():
     )
     
     # Worker AIインスタンス化
-    worker = DefaultWorkerAI(session, llm_manager)
+    worker = WorkerAI(session, llm_manager)
     
     # テスト用のサブタスク
     test_subtask = SubTask(

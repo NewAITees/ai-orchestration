@@ -16,6 +16,7 @@ from agno.models.ollama import Ollama
 from agno.media import Image
 
 from .config import settings
+from .utils.debugger import Debugger
 
 class AgnoClient:
     """

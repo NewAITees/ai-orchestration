@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List, Any, Optional, Set, Tuple
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -10,8 +11,16 @@ class OrchestratorSettings(BaseSettings):
     """AIオーケストレーションシステムの設定"""
     
     # 基本設定
+    BASE_DIR: Path = Field(default=Path(__file__).resolve().parent.parent)
     DEFAULT_MODEL: str = Field(default="gemma3:27b")
     DEFAULT_MODE: OrchestratorMode = Field(default=OrchestratorMode.CREATIVE)
+    
+    # Ollama関連の設定
+    OLLAMA_HOST: str = Field(default="localhost")
+    OLLAMA_PORT: int = Field(default=11434)
+    OLLAMA_TIMEOUT: int = Field(default=60)
+    OLLAMA_DEFAULT_MODEL: str = Field(default="gemma3:27b")
+    OLLAMA_BASE_URL: str = Field(default="http://localhost:11434")
     
     # コンポーネント設定
     ENABLED_COMPONENTS: Set[ComponentType] = Field(
@@ -102,6 +111,15 @@ class OrchestratorSettings(BaseSettings):
         env_file = ".env"
         env_prefix = "ORCHESTRATOR_"
         case_sensitive = True
+    
+    def get_ollama_url(self) -> str:
+        """
+        OllamaサーバーのURLを取得
+        
+        Returns:
+            str: OllamaサーバーのURL
+        """
+        return f"http://{self.OLLAMA_HOST}:{self.OLLAMA_PORT}"
 
 
 # デフォルトのパラメータ辞書

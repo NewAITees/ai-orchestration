@@ -54,5 +54,6 @@ htmlcov/
 .pytest_cache/ 
 
 
-.txt
+*.txt
+*.json
 

@@ -4,14 +4,17 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum, auto
 from dataclasses import dataclass
+import json
+import traceback
+import asyncio
 
-from ..core.message import OrchestrationMessage, MessageType, Component
+from ..types import (
+    TaskStatus, SubtaskStatus, ReviewResult, SubTask, 
+    IReviewerAI, BaseAIComponent, Component,
+    MessageType, OrchestrationMessage, TaskExecutionResult
+)
 from ..core.session import Session
 from ..llm.llm_manager import LLMManager
-from ..types import (
-    ReviewResult, IReviewerAI, BaseAIComponent,
-    SubTask, TaskStatus, TaskExecutionResult
-)
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +191,7 @@ class ReviewerAI(BaseAIComponent):
         
         try:
             # タスクの状態を評価中に更新
-            task.status = TaskStatus.REVIEWING
+            task.status = SubtaskStatus.REVIEWING
             
             # タスクタイプを判定
             task_type = self._determine_task_type(task)

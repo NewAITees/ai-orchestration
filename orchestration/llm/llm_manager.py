@@ -185,7 +185,7 @@ class BaseLLMManager:
         """
         self.model_name = model_name or settings.DEFAULT_MODEL
         self.api_key = api_key
-        self.base_url = base_url
+        self.base_url = base_url or settings.OLLAMA_BASE_URL
         self.parameters = parameters or {}
         self.last_used = datetime.now()
     

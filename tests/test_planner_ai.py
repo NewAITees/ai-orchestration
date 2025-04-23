@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from pathlib import Path
 
 from orchestration.llm.llm_manager import LLMManager
-from orchestration.components.planner import DefaultPlannerAI
+from orchestration.components.planner import PlannerAI
 from orchestration.core.session import Session
 from orchestration.types import TaskModel
 
@@ -29,7 +29,7 @@ async def test_planner_task_planning():
     )
     
     # Planner AIインスタンス化
-    planner = DefaultPlannerAI(session, llm_manager)
+    planner = PlannerAI(session, llm_manager)
     
     # テスト用のタスク定義
     test_task = TaskModel(

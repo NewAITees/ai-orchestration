@@ -2,9 +2,10 @@ from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from ..core.session import Session
 from ..llm.llm_manager import LLMManager
 from ..types import (
-    TaskModel, TaskAnalysisResult, IPlannerAI,
+    TaskModel, TaskAnalysisResult,
     BaseAIComponent, SubTask,
-    OrchestrationMessage, MessageType, Component
+    OrchestrationMessage, Component,
+    MessageType
 )
 
 class PlannerAI(BaseAIComponent):
@@ -20,8 +21,14 @@ class PlannerAI(BaseAIComponent):
         self.llm_manager = llm_manager
         print(f"PlannerAI ({self.session.id}) initialized with config: {kwargs}")
 
-    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
         """メッセージを処理し、応答メッセージのリストを返す"""
+        if message.type != MessageType.COMMAND:
+            return [self._create_error_message(
+                message.sender,
+                f"サポートされていないメッセージタイプ: {message.type}"
+            )]
+        
         content = message.content
         action = content.get("action")
         
@@ -29,7 +36,7 @@ class PlannerAI(BaseAIComponent):
             if action == "plan_task":
                 task_id = content.get("task_id")
                 if not task_id:
-                    return [self._create_error_response(
+                    return [self._create_error_message(
                         message.sender,
                         "task_id が指定されていません"
                     )]
@@ -37,35 +44,35 @@ class PlannerAI(BaseAIComponent):
                 requirements = content.get("requirements", [])
                 plan_result = self.plan_task(task_id, requirements)
                 
-                return [self._create_response(
+                return [self._create_message(
                     message.sender,
-                    {"plan": plan_result},
-                    "task_planned"
+                    MessageType.RESPONSE,
+                    {"plan": plan_result}
                 )]
             elif action == "validate_plan":
                 plan = content.get("plan")
                 if not plan:
-                    return [self._create_error_response(
+                    return [self._create_error_message(
                         message.sender,
                         "plan が指定されていません"
                     )]
                 
                 validation_result = self.validate_plan(plan)
                 
-                return [self._create_response(
+                return [self._create_message(
                     message.sender,
-                    {"validation_result": validation_result},
-                    "plan_validated"
+                    MessageType.RESPONSE,
+                    {"validation_result": validation_result}
                 )]
             else:
-                return [self._create_error_response(
+                return [self._create_error_message(
                     message.sender,
                     f"未対応のアクション: {action}"
                 )]
         except Exception as e:
             error_msg = f"コマンド処理中にエラーが発生しました: {str(e)}"
             print(f"[Planner] {error_msg}")
-            return [self._create_error_response(
+            return [self._create_error_message(
                 message.sender,
                 error_msg
             )]
