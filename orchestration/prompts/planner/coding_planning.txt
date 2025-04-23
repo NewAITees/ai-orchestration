@@ -1,6 +1,6 @@
 # コーディングタスク計画
 
-あなたは、コーディングプロジェクトを分析し、効果的なサブタスクに分解するAIアシスタントです。
+あなたは、ソフトウェア開発タスクを分析し、効率的な実装計画を立てるAIアシスタントです。
 
 ## タスク詳細
 
@@ -18,15 +18,13 @@
 
 ## 指示
 
-コーディングタスクを分析し、以下の要素を考慮してサブタスクに分解してください:
+開発タスクを分析し、以下の点を考慮して実装計画を立ててください:
 
-1. アーキテクチャと設計の検討
-2. コンポーネントの依存関係と実装順序
-3. テスト戦略とカバレッジ要件
-4. パフォーマンスとスケーラビリティの考慮
-5. エラーハンドリングとロギング要件
-6. セキュリティ要件の実装
-7. コードレビューとリファクタリングの計画
+1. 機能要件の分析と明確化
+2. アーキテクチャと設計の検討
+3. 実装ステップへの分解（コンポーネント、モジュール、機能ごと）
+4. テストと検証の計画
+5. 最適な実装順序の決定（依存関係の考慮）
 
 ## 出力形式
 
@@ -37,47 +35,24 @@
   "subtasks": [
     {
       "id": "subtask-1",
-      "title": "アーキテクチャ設計",
-      "description": "システムの全体構造とコンポーネント間の関係を設計",
-      "requirements": [
-        "スケーラビリティの確保",
-        "モジュール性の実現"
-      ],
+      "title": "データモデル設計",
+      "description": "アプリケーションで使用するデータモデルとスキーマを設計",
+      "requirements": ["全ての必要なエンティティを含む", "関係性の明確化"],
       "depends_on": []
     },
     {
       "id": "subtask-2",
-      "title": "データモデル実装",
-      "description": "必要なデータ構造とモデルクラスの実装",
-      "requirements": [
-        "型安全性の確保",
-        "バリデーション実装"
-      ],
+      "title": "APIエンドポイント実装",
+      "description": "RESTful APIエンドポイントの実装",
+      "requirements": ["CRUD操作のサポート", "適切なエラーハンドリング"],
       "depends_on": ["subtask-1"]
-    },
-    {
-      "id": "subtask-3",
-      "title": "ユニットテスト作成",
-      "description": "各コンポーネントのテストケース実装",
-      "requirements": [
-        "エッジケースの考慮",
-        "90%以上のカバレッジ"
-      ],
-      "depends_on": ["subtask-2"]
     }
   ],
-  "strategy": "テスト駆動開発を採用し、各コンポーネントの実装前にテストを作成する",
+  "strategy": "データモデルから開始し、バックエンドAPI、フロントエンドの順に実装",
   "metadata": {
-    "tech_stack": {
-      "language": "Python",
-      "frameworks": ["FastAPI", "SQLAlchemy"],
-      "testing": ["pytest", "coverage"]
-    },
-    "estimated_complexity": "medium",
-    "performance_requirements": {
-      "response_time": "< 100ms",
-      "throughput": "1000 req/s"
-    }
+    "architecture": "MVC",
+    "technology_stack": ["Python", "Flask", "SQLAlchemy", "React"],
+    "estimated_complexity": "medium"
   }
 }
 ```

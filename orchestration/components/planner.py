@@ -20,9 +20,153 @@ class PlannerAI(BaseAIComponent):
         self.llm_manager = llm_manager
         print(f"PlannerAI ({self.session.id}) initialized with config: {kwargs}")
 
-    def process_message(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
+    def _process_command(self, message: OrchestrationMessage) -> List[OrchestrationMessage]:
         """メッセージを処理し、応答メッセージのリストを返す"""
-        pass  # 実装は省略
+        content = message.content
+        action = content.get("action")
+        
+        try:
+            if action == "plan_task":
+                task_id = content.get("task_id")
+                if not task_id:
+                    return [self._create_error_response(
+                        message.sender,
+                        "task_id が指定されていません"
+                    )]
+                
+                requirements = content.get("requirements", [])
+                plan_result = self.plan_task(task_id, requirements)
+                
+                return [self._create_response(
+                    message.sender,
+                    {"plan": plan_result},
+                    "task_planned"
+                )]
+            elif action == "validate_plan":
+                plan = content.get("plan")
+                if not plan:
+                    return [self._create_error_response(
+                        message.sender,
+                        "plan が指定されていません"
+                    )]
+                
+                validation_result = self.validate_plan(plan)
+                
+                return [self._create_response(
+                    message.sender,
+                    {"validation_result": validation_result},
+                    "plan_validated"
+                )]
+            else:
+                return [self._create_error_response(
+                    message.sender,
+                    f"未対応のアクション: {action}"
+                )]
+        except Exception as e:
+            error_msg = f"コマンド処理中にエラーが発生しました: {str(e)}"
+            print(f"[Planner] {error_msg}")
+            return [self._create_error_response(
+                message.sender,
+                error_msg
+            )]
+
+    def plan_task(self, task_id: str, requirements: List[str] = None) -> Dict[str, Any]:
+        """タスク計画作成"""
+        task = self.session.get_subtask(task_id)
+        requirements = requirements or (task.requirements if task else [])
+        
+        try:
+            # タスクタイプの判定
+            task_type = self._determine_task_type(task)
+            
+            # テンプレート変数の準備
+            variables = {
+                "task_id": task_id,
+                "task_title": task.title if task else "メインタスク",
+                "task_description": task.description if task else "",
+                "requirements": requirements,
+                "session_context": {
+                    "title": getattr(self.session, 'title', ''),
+                    "mode": getattr(self.session, 'mode', '')
+                }
+            }
+            
+            # LLMを使用して計画を生成
+            template_id = f"planner/{task_type}_planning"
+            result_content = self.llm_manager.generate_with_template(template_id, variables)
+            
+            # 結果の解析（JSONの抽出）
+            parsed_result = self.llm_manager.parse_json_response(result_content)
+            
+            # 計画結果の作成
+            planning_result = {
+                "task_id": task_id,
+                "subtasks": parsed_result.get("subtasks", []),
+                "dependencies": {},
+                "strategy": parsed_result.get("strategy", "順次実行"),
+                "metadata": parsed_result.get("metadata", {})
+            }
+            
+            return planning_result
+            
+        except Exception as e:
+            error_msg = f"タスク計画中にエラーが発生しました: {str(e)}"
+            print(f"[Planner] {error_msg}")
+            return {
+                "task_id": task_id,
+                "subtasks": [],
+                "dependencies": {},
+                "error": error_msg
+            }
+
+    def validate_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
+        """計画の検証"""
+        try:
+            # テンプレート変数の準備
+            variables = {
+                "plan": plan,
+                "session_id": self.session.id
+            }
+            
+            # LLMを使用して計画を検証
+            template_id = "planner/plan_validation"
+            result_content = self.llm_manager.generate_with_template(template_id, variables)
+            
+            # 結果の解析
+            parsed_result = self.llm_manager.parse_json_response(result_content)
+            
+            return parsed_result
+            
+        except Exception as e:
+            error_msg = f"計画検証中にエラーが発生しました: {str(e)}"
+            print(f"[Planner] {error_msg}")
+            return {
+                "is_valid": False,
+                "issues": [error_msg],
+                "suggestions": ["計画を再生成してください"]
+            }
+
+    def _determine_task_type(self, task: Optional[TaskModel]) -> str:
+        """タスクタイプを判定"""
+        if not task:
+            return "generic"
+            
+        title = task.title.lower() if task.title else ""
+        description = task.description.lower() if task.description else ""
+        
+        if any(keyword in title or keyword in description for keyword in 
+              ["創作", "小説", "物語", "creative", "story"]):
+            return "creative"
+        
+        if any(keyword in title or keyword in description for keyword in 
+              ["コード", "プログラム", "実装", "code", "programming"]):
+            return "coding"
+        
+        if any(keyword in title or keyword in description for keyword in 
+              ["分析", "調査", "研究", "analysis", "research"]):
+            return "analysis"
+        
+        return "generic"
 
     def analyze_task(self, task: str) -> TaskAnalysisResult:
         """タスクを分析し、構造化された結果を返す"""
@@ -52,37 +196,6 @@ class PlannerAI(BaseAIComponent):
         #     self.session.add_subtask(st) # Let the caller (e.g., Director or Command) handle adding to session
 
         return subtasks
-
-    def plan_task(self, task_id: str, requirements: List[str] = None) -> Dict[str, Any]:
-        """タスク計画作成"""
-        task = self.session.get_subtask(task_id)
-        requirements = requirements or (task.requirements if task else [])
-        
-        # LLMを使用したタスク分解
-        if self.llm_manager:
-            prompt = f"""
-            タスクを分解してください:
-            タスクID: {task_id}
-            タスク: {task.title if task else 'メインタスク'}
-            説明: {task.description if task else ''}
-            要件: {', '.join(requirements)}
-            
-            サブタスクのリストを作成してください。
-            """
-            # 実際のLLM呼び出しはここで行う
-        
-        # サンプルの計画（実際はLLMの出力を解析して生成）
-        subtasks = [
-            {"id": f"{task_id}-sub1", "title": "サブタスク1", "description": "最初のステップ"},
-            {"id": f"{task_id}-sub2", "title": "サブタスク2", "description": "次のステップ"}
-        ]
-        
-        return {
-            "subtasks": subtasks,
-            "dependencies": {
-                f"{task_id}-sub2": [f"{task_id}-sub1"]
-            }
-        }
 
     def validate_solution(self, solution: Any) -> bool:
         """
