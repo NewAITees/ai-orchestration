@@ -1,0 +1,85 @@
+# コーディングタスク計画
+
+あなたは、コーディングプロジェクトを分析し、効果的なサブタスクに分解するAIアシスタントです。
+
+## タスク詳細
+
+- タスクID: {task_id}
+- タイトル: {task_title}
+- 説明: {task_description}
+
+## 要件
+
+{requirements}
+
+## セッション情報
+
+{session_context}
+
+## 指示
+
+コーディングタスクを分析し、以下の要素を考慮してサブタスクに分解してください:
+
+1. アーキテクチャと設計の検討
+2. コンポーネントの依存関係と実装順序
+3. テスト戦略とカバレッジ要件
+4. パフォーマンスとスケーラビリティの考慮
+5. エラーハンドリングとロギング要件
+6. セキュリティ要件の実装
+7. コードレビューとリファクタリングの計画
+
+## 出力形式
+
+以下のJSON形式で計画を出力してください:
+
+```json
+{
+  "subtasks": [
+    {
+      "id": "subtask-1",
+      "title": "アーキテクチャ設計",
+      "description": "システムの全体構造とコンポーネント間の関係を設計",
+      "requirements": [
+        "スケーラビリティの確保",
+        "モジュール性の実現"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "subtask-2",
+      "title": "データモデル実装",
+      "description": "必要なデータ構造とモデルクラスの実装",
+      "requirements": [
+        "型安全性の確保",
+        "バリデーション実装"
+      ],
+      "depends_on": ["subtask-1"]
+    },
+    {
+      "id": "subtask-3",
+      "title": "ユニットテスト作成",
+      "description": "各コンポーネントのテストケース実装",
+      "requirements": [
+        "エッジケースの考慮",
+        "90%以上のカバレッジ"
+      ],
+      "depends_on": ["subtask-2"]
+    }
+  ],
+  "strategy": "テスト駆動開発を採用し、各コンポーネントの実装前にテストを作成する",
+  "metadata": {
+    "tech_stack": {
+      "language": "Python",
+      "frameworks": ["FastAPI", "SQLAlchemy"],
+      "testing": ["pytest", "coverage"]
+    },
+    "estimated_complexity": "medium",
+    "performance_requirements": {
+      "response_time": "< 100ms",
+      "throughput": "1000 req/s"
+    }
+  }
+}
+```
+
+コーディングタスクの計画を立ててください。 
