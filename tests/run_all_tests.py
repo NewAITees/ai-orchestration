@@ -3,12 +3,13 @@ import json
 from pathlib import Path
 import sys
 import time
+import pytest
+import subprocess
 
 # テストモジュールをインポート
 from tests.test_director_ai import test_director_integration
 from tests.test_planner_ai import test_planner_task_planning
 from tests.test_worker_ai import test_worker_task_execution
-from tests.test_reviewer_ai import test_reviewer_task_evaluation
 
 async def run_all_tests():
     """全テストを実行し、結果をまとめる"""
@@ -76,12 +77,21 @@ async def run_all_tests():
     # 4. Reviewer AIテスト
     print("\n=== Reviewer AI テスト実行中... ===")
     try:
-        reviewer_identical, reviewer_result1, reviewer_result2 = await test_reviewer_task_evaluation()
+        # pytestを別プロセスで実行
+        result = subprocess.run(
+            ["poetry", "run", "pytest", "-v", "tests/test_reviewer_ai.py"],
+            capture_output=True,
+            text=True
+        )
+        reviewer_success = result.returncode == 0
         test_results["reviewer"] = {
-            "success": reviewer_identical,
-            "message": "同じ入力に対して同じ出力が生成されました" if reviewer_identical else "出力に差異があります",
+            "success": reviewer_success,
+            "message": "テストが成功しました" if reviewer_success else "テストが失敗しました",
             "results_dir": str(base_dir / "reviewer_test_data")
         }
+        if not reviewer_success:
+            print(result.stdout)
+            print(result.stderr)
     except Exception as e:
         print(f"Reviewer AIテスト実行エラー: {e}")
         test_results["reviewer"] = {

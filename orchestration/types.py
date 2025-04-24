@@ -62,8 +62,8 @@ class ProcessPhase(str, Enum):
     RESULT_INTEGRATION = "result_integration"  # 結果統合
 
 
-class EvaluationResult(str, Enum):
-    """評価結果"""
+class EvaluationStatus(str, Enum):
+    """評価結果のステータス"""
     PASS = "pass"                # 合格
     FAIL = "fail"                # 不合格
     PARTIAL = "partial"          # 部分的に合格
@@ -441,6 +441,35 @@ class FinalResult(BaseModel):
                         "completion_time": 120.5
                     },
                     "improvements": []
+                }
+            ]
+        }
+    )
+
+class EvaluationResult(BaseModel):
+    """タスク評価結果のモデル"""
+    task_id: str = Field(..., description="評価対象のタスクID")
+    status: TaskStatus = Field(..., description="評価のステータス")
+    score: float = Field(..., ge=0.0, le=1.0, description="評価スコア")
+    feedback: str = Field(..., description="評価フィードバック")
+    metrics: Dict[str, float] = Field(default_factory=dict, description="評価メトリクス")
+    created_at: datetime = Field(default_factory=datetime.now, description="評価実施日時")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "task_id": "task_123",
+                    "status": TaskStatus.COMPLETED,
+                    "score": 0.85,
+                    "feedback": "タスクは概ね完了していますが、改善の余地があります。",
+                    "metrics": {
+                        "quality": 0.8,
+                        "completeness": 0.9,
+                        "relevance": 0.85
+                    }
                 }
             ]
         }

@@ -1,98 +1,164 @@
 import asyncio
 import json
 import os
+import pytest
 from typing import Dict, Any, List
 from pathlib import Path
 
 from orchestration.llm.llm_manager import LLMManager
 from orchestration.components.reviewer import ReviewerAI
-from orchestration.core.session import Session, SubTask
-from orchestration.types import TaskExecutionResult, TaskStatus
+from orchestration.core.session import Session
+from orchestration.types import (
+    TaskStatus,
+    SubtaskStatus,
+    SubTask,
+    TaskExecutionResult,
+    EvaluationResult,
+    EvaluationStatus
+)
 
-async def test_reviewer_task_evaluation():
-    """
-    Reviewer AI の評価機能をテストする
-    同じ入力に対して同じ出力が得られることを確認
-    """
-    print("=== Reviewer AI 評価機能テスト ===")
-    
-    # テスト用データディレクトリの作成
-    test_dir = Path("./tests/reviewer_test_data")
-    test_dir.mkdir(parents=True, exist_ok=True)
-    
-    # テスト用のセッション作成
-    session = Session(id="test-reviewer-session")
-    
-    # LLMManager初期化 (temperature=0 で決定論的な応答を得る)
+@pytest.fixture
+def test_dir():
+    """テストデータディレクトリのfixture"""
+    dir_path = Path("./tests/reviewer_test_data")
+    dir_path.mkdir(parents=True, exist_ok=True)
+    yield dir_path
+    # クリーンアップ: テストデータの削除
+    for file in dir_path.glob("*.json"):
+        file.unlink()
+    if dir_path.exists():
+        dir_path.rmdir()
+
+@pytest.fixture
+def session():
+    """テストセッションのfixture"""
+    return Session(id="test-reviewer-session")
+
+@pytest.fixture
+def reviewer(session, test_dir):
+    """ReviewerAIインスタンスのfixture"""
     llm_manager = LLMManager(
         parameters={"temperature": 0.0, "top_p": 1.0, "max_tokens": 2000}
     )
-    
-    # Reviewer AIインスタンス化
-    reviewer = ReviewerAI(session, llm_manager)
-    
-    # テスト用のサブタスクと実行結果
-    test_subtask = SubTask(
-        id="subtask-1",
-        title="プロット概要の作成",
-        description="ファンタジー短編小説のプロット概要の作成",
-        requirements=["起承転結の構造", "予想外の展開", "明確なテーマ"]
+    return ReviewerAI(session=session, llm_manager=llm_manager, output_dir=str(test_dir))
+
+@pytest.fixture
+def test_task(session):
+    """テスト用タスクのfixture"""
+    task = SubTask(
+        id="task-1",
+        title="キャラクター設定の作成",
+        description="ファンタジー小説の主人公となる魔法使いの見習いのキャラクター設定を作成する。",
+        requirements=["個性的な性格", "成長の余地がある", "魔法の才能に特徴がある"],
+        status=SubtaskStatus.IN_PROGRESS
     )
-    
-    test_result = TaskExecutionResult(
-        task_id=test_subtask.id,
+    session.add_subtask(task)
+    return task
+
+@pytest.fixture
+def test_result():
+    """テスト用実行結果のfixture"""
+    return TaskExecutionResult(
+        task_id="task-1",
         status=TaskStatus.COMPLETED,
         result={
-            "content": """
-            魔法使いの見習いであるマリオンは、師匠から禁じられていた禁忌の魔法書を偶然見つける。
-            好奇心から呪文を唱えてしまったマリオンは、自分の影が実体化し、暴走するという問題を引き起こす。
-            影は次第に力を増し、町の人々を脅かし始める。マリオンは師匠の助けを借りることなく問題を解決しようとするが失敗を重ねる。
-            最終的にマリオンは、魔法の本質は力ではなく責任であることを理解し、自分の弱さを認めて師匠に助けを求める。
-            二人の協力により影を鎮め、マリオンは真の魔法使いへの一歩を踏み出す。
-            """
+            "character": {
+                "name": "エルウィン・リード",
+                "age": 16,
+                "gender": "男性",
+                "appearance": [
+                    "煤けたような黒髪",
+                    "深い緑色の瞳",
+                    "痩身で小柄な体格"
+                ],
+                "personality": [
+                    "好奇心旺盛",
+                    "やや内向的",
+                    "努力家"
+                ],
+                "magic_talent": [
+                    "一般的な魔法は平均以下",
+                    "古代魔法に対して特異な感応力を持つ"
+                ]
+            }
         }
     )
+
+@pytest.mark.asyncio
+async def test_reviewer_task_evaluation(reviewer, test_task, test_result, test_dir):
+    """ReviewerAIのタスク評価機能をテストする"""
+    # 2回評価を実行
+    result1 = await reviewer.evaluate_task(test_task, test_result)
+    result2 = await reviewer.evaluate_task(test_task, test_result)
     
-    # テスト実行 (2回実行して結果を比較)
-    print("最初の実行...")
-    # サブタスクをセッションに追加
-    session.add_subtask(test_subtask)
+    # 評価結果の検証
+    assert isinstance(result1, EvaluationResult)
+    assert result1.task_id == test_task.id
+    assert result1.status == TaskStatus.COMPLETED
+    assert 0 <= result1.score <= 1.0
+    assert isinstance(result1.feedback, str)
+    assert isinstance(result1.metrics, dict)
     
-    # review_task メソッドを呼び出し
-    result1 = reviewer.review_task(test_subtask, test_result)
+    # 同じ入力に対して同じ結果が得られることを確認
+    assert result1.model_dump() == result2.model_dump()
     
-    # 結果をJSONファイルとして保存
-    with open(test_dir / "reviewer_result1.json", "w", encoding="utf-8") as f:
-        json.dump(result1.model_dump(), f, ensure_ascii=False, indent=2, default=str)
+    # 評価履歴の保存を確認
+    reviewer.save_evaluation_history()
+    history_files = list(test_dir.glob("evaluation_history_*.json"))
+    assert len(history_files) > 0
     
-    print("2回目の実行...")
-    result2 = reviewer.review_task(test_subtask, test_result)
+    # 最新の履歴ファイルを読み込んで検証
+    latest_history_file = max(history_files, key=lambda p: p.stat().st_mtime)
+    with open(latest_history_file) as f:
+        history = json.load(f)
     
-    # 2回目の結果を保存
-    with open(test_dir / "reviewer_result2.json", "w", encoding="utf-8") as f:
-        json.dump(result2.model_dump(), f, ensure_ascii=False, indent=2, default=str)
+    assert len(history) >= 2  # 2回の評価結果が含まれているはず
+    assert history[-1]["task_id"] == test_task.id
+    assert history[-1]["score"] == result2.score
+
+@pytest.mark.asyncio
+async def test_evaluate_task(reviewer, test_task):
+    """evaluate_taskメソッドの非同期テスト"""
+    evaluation = await reviewer.evaluate_task(test_task.id, test_task.description)
     
-    # 結果の比較
-    result_dict1 = result1.model_dump()
-    result_dict2 = result2.model_dump()
+    assert isinstance(evaluation, EvaluationResult)
+    assert evaluation.task_id == test_task.id
+    assert evaluation.status == TaskStatus.COMPLETED
+    assert 0 <= evaluation.score <= 1.0
+    assert isinstance(evaluation.feedback, str)
+    assert isinstance(evaluation.metrics, dict)
+
+@pytest.mark.asyncio
+async def test_suggest_improvements(reviewer, test_task, test_result):
+    """suggest_improvementsメソッドの非同期テスト"""
+    review_result = await reviewer.review_task(test_task, test_result)
+    improvements = await reviewer.suggest_improvements(review_result)
     
-    are_identical = result_dict1 == result_dict2
-    print(f"結果は一致しています: {are_identical}")
+    assert improvements is not None
+    assert isinstance(improvements, list)
+    assert len(improvements) > 0
+    for improvement in improvements:
+        assert isinstance(improvement, dict)
+        assert "title" in improvement
+        assert "description" in improvement
+        assert "priority" in improvement
+        assert improvement["priority"] in ["high", "medium", "low"]
+
+@pytest.mark.asyncio
+async def test_calculate_metrics(reviewer, test_task, test_result):
+    """_calculate_metricsメソッドの非同期テスト"""
+    llm_response = await reviewer._generate_with_template(
+        "reviewer/evaluate.prompt",
+        {"task": test_task.model_dump(), "result": test_result.model_dump()}
+    )
+    metrics = await reviewer._calculate_metrics(test_task, test_result, llm_response)
     
-    if not are_identical:
-        print("差異があります:")
-        # スコアを比較
-        score1 = result_dict1.get("score", 0)
-        score2 = result_dict2.get("score", 0)
-        print(f"スコア: {score1} vs {score2}")
-        
-        # フィードバックの先頭部分を比較
-        feedback1 = result_dict1.get("feedback", "")
-        feedback2 = result_dict2.get("feedback", "")
-        print(f"フィードバック1: {feedback1[:100]}...")
-        print(f"フィードバック2: {feedback2[:100]}...")
-    
-    return are_identical, result_dict1, result_dict2
+    assert metrics is not None
+    assert 0 <= metrics.quality <= 1.0
+    assert 0 <= metrics.completeness <= 1.0
+    assert 0 <= metrics.relevance <= 1.0
+    assert 0 <= metrics.creativity <= 1.0
+    assert 0 <= metrics.technical_accuracy <= 1.0
 
 if __name__ == "__main__":
-    asyncio.run(test_reviewer_task_evaluation())
+    pytest.main(["-v", __file__])

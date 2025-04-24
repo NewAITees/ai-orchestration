@@ -1,5 +1,6 @@
 from typing import List, Optional, Callable, Dict
 import sys
+import asyncio
 from dataclasses import dataclass, field
 from app.orchestration.core.session import Session, Task, TaskStatus, SubTask
 from app.orchestration.components.director import DefaultDirectorAI
@@ -59,7 +60,7 @@ class NovelWriter:
             "4": "ミステリー"
         }
     
-    def run(self):
+    async def run(self):
         """小説作成プロセスを実行"""
         self.output_func("=== 小説作成支援システム ===")
         
@@ -69,7 +70,7 @@ class NovelWriter:
         # 2. タスク計画
         self.output_func("\n=== タスク計画 ===")
         planner = self.components["planner"]
-        plan_result = planner.plan_task(self.session.id, self.session.requirements)
+        plan_result = await planner.plan_task(self.session.id, self.session.requirements)
         
         # 3. サブタスク追加
         for subtask_data in plan_result["subtasks"]:
@@ -81,7 +82,7 @@ class NovelWriter:
             self.session.add_subtask(subtask)
         
         # 4. タスク実行と評価
-        self._execute_tasks()
+        await self._execute_tasks()
         
         self.output_func("\n=== 小説作成が完了しました ===")
     
@@ -115,7 +116,7 @@ class NovelWriter:
         
         self.session.requirements = requirements
     
-    def _execute_tasks(self):
+    async def _execute_tasks(self):
         """タスク実行"""
         worker = self.components["worker"]
         evaluator = self.components["evaluator"]
@@ -124,11 +125,11 @@ class NovelWriter:
             self.output_func(f"\n=== タスク「{task.title}」を実行中... ===")
             
             # 実行
-            result = worker.execute_task(task)
+            result = await worker.execute_task(task)
             task.result = result["content"]
             
             # 評価
-            evaluation = evaluator.evaluate_task(task)
+            evaluation = await evaluator.evaluate_task(task)
             
             self.output_func(f"\n評価スコア: {evaluation['score']}")
             self.output_func(f"フィードバック: {evaluation['feedback']}")
@@ -144,7 +145,7 @@ class NovelWriter:
                 return value
             self.output_func("無効な入力です。再入力してください。")
 
-def main():
+async def main():
     """メイン実行関数"""
     # カスタム設定の作成（例）
     custom_config = NovelWriterConfig(
@@ -191,8 +192,8 @@ def main():
             "worker": worker
         }
     )
-    writer.run()
+    await writer.run()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
 

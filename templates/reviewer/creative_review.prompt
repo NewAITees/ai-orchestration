@@ -1,0 +1,30 @@
+タスクレビュー
+
+タスクID: {{task_id}}
+タイトル: {{task_title}}
+説明: {{task_description}}
+要件:
+{% for req in requirements %}
+- {{req}}
+{% endfor %}
+
+結果:
+{{result_content}}
+
+以下の基準でレビューを行い、JSON形式で結果を返してください：
+
+{
+  "metrics": {
+    "quality": 0.0-1.0（品質）,
+    "completeness": 0.0-1.0（完了度）,
+    "relevance": 0.0-1.0（関連性）,
+    "creativity": 0.0-1.0（創造性）,
+    "technical_accuracy": 0.0-1.0（技術的正確性）
+  },
+  "suggestions": [
+    "改善提案1",
+    "改善提案2",
+    ...
+  ],
+  "feedback": "詳細なフィードバックをここに記述"
+} 

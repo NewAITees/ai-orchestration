@@ -45,14 +45,14 @@ async def test_planner_task_planning():
     session.add_subtask(test_task)
     
     # plan_task メソッドを呼び出し
-    result1 = planner.plan_task(test_task.id)
+    result1 = await planner.plan_task(test_task.id)
     
     # 結果をJSONファイルとして保存
     with open(test_dir / "planner_result1.json", "w", encoding="utf-8") as f:
         json.dump(result1, f, ensure_ascii=False, indent=2)
     
     print("2回目の実行...")
-    result2 = planner.plan_task(test_task.id)
+    result2 = await planner.plan_task(test_task.id)
     
     # 2回目の結果を保存
     with open(test_dir / "planner_result2.json", "w", encoding="utf-8") as f:

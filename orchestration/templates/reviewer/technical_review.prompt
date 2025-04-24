@@ -1,0 +1,31 @@
+タスク: {task_description}
+
+実行結果: {execution_result}
+
+以下の技術的な観点から、タスクの実行結果をレビューしてください：
+
+1. コードの品質と可読性
+2. パフォーマンスと効率性
+3. エラーハンドリングとロバスト性
+4. セキュリティ上の考慮事項
+5. テスト可能性とメンテナンス性
+
+レビュー結果は以下のJSON形式で返してください：
+
+{
+  "metrics": {
+    "code_quality": float,     // 0.0-1.0
+    "performance": float,      // 0.0-1.0
+    "robustness": float,       // 0.0-1.0
+    "security": float,         // 0.0-1.0
+    "maintainability": float   // 0.0-1.0
+  },
+  "improvements": [
+    {
+      "title": string,
+      "description": string,
+      "priority": "high" | "medium" | "low",
+      "category": "quality" | "performance" | "security" | "maintainability"
+    }
+  ]
+} 

@@ -140,11 +140,11 @@ class BaseDirectorAI(BaseAIComponent):
 @runtime_checkable
 class PlannerProtocol(AIComponentProtocol, Protocol):
     """Planner AIのインターフェース"""
-    def plan_task(self, task: TaskModel, requirements: Optional[List[str]] = None) -> PlanningResult:
+    async def plan_task(self, task: TaskModel, requirements: Optional[List[str]] = None) -> PlanningResult:
         """タスクの実行計画を生成"""
         pass
     
-    def validate_plan(self, plan: PlanningResult) -> bool:
+    async def validate_plan(self, plan: PlanningResult) -> bool:
         """生成された計画の妥当性を検証"""
         pass
 
@@ -153,12 +153,12 @@ class BasePlannerAI(BaseAIComponent):
     component_type = Component.PLANNER
     
     @abstractmethod
-    def plan_task(self, task: TaskModel, requirements: Optional[List[str]] = None) -> PlanningResult:
+    async def plan_task(self, task: TaskModel, requirements: Optional[List[str]] = None) -> PlanningResult:
         """タスク計画の基本実装"""
         pass
     
     @abstractmethod
-    def validate_plan(self, plan: PlanningResult) -> bool:
+    async def validate_plan(self, plan: PlanningResult) -> bool:
         """ソリューション検証の基本実装"""
         pass
 
@@ -193,11 +193,11 @@ class BaseWorkerAI(BaseAIComponent):
 @runtime_checkable
 class ReviewerProtocol(AIComponentProtocol, Protocol):
     """Reviewer AIのインターフェース"""
-    def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
+    async def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
         """タスクの評価を実行"""
         pass
     
-    def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
+    async def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
         """改善提案を生成"""
         pass
 
@@ -206,11 +206,11 @@ class BaseReviewerAI(BaseAIComponent):
     component_type = Component.REVIEWER
     
     @abstractmethod
-    def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
+    async def evaluate_task(self, task: SubTask, result: Optional[TaskExecutionResult] = None) -> EvaluationResult:
         """タスク評価の基本実装"""
         pass
     
     @abstractmethod
-    def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
+    async def suggest_improvements(self, evaluation: EvaluationResult) -> List[Improvement]:
         """改善提案生成の基本実装"""
         pass 

@@ -77,7 +77,7 @@ class PlannerAI(BaseAIComponent):
                 error_msg
             )]
 
-    def plan_task(self, task_id: str, requirements: List[str] = None) -> Dict[str, Any]:
+    async def plan_task(self, task_id: str, requirements: List[str] = None) -> Dict[str, Any]:
         """タスク計画作成"""
         task = self.session.get_subtask(task_id)
         requirements = requirements or (task.requirements if task else [])
@@ -100,10 +100,10 @@ class PlannerAI(BaseAIComponent):
             
             # LLMを使用して計画を生成
             template_id = f"planner/{task_type}_planning"
-            result_content = self.llm_manager.generate_with_template(template_id, variables)
+            result_content = await self.llm_manager.generate_with_template(template_id, variables)
             
             # 結果の解析（JSONの抽出）
-            parsed_result = self.llm_manager.parse_json_response(result_content)
+            parsed_result = await self.llm_manager.parse_json_response(result_content)
             
             # 計画結果の作成
             planning_result = {
@@ -126,7 +126,7 @@ class PlannerAI(BaseAIComponent):
                 "error": error_msg
             }
 
-    def validate_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
+    async def validate_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
         """計画の検証"""
         try:
             # テンプレート変数の準備
@@ -137,10 +137,10 @@ class PlannerAI(BaseAIComponent):
             
             # LLMを使用して計画を検証
             template_id = "planner/plan_validation"
-            result_content = self.llm_manager.generate_with_template(template_id, variables)
+            result_content = await self.llm_manager.generate_with_template(template_id, variables)
             
             # 結果の解析
-            parsed_result = self.llm_manager.parse_json_response(result_content)
+            parsed_result = await self.llm_manager.parse_json_response(result_content)
             
             return parsed_result
             
