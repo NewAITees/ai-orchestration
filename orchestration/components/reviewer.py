@@ -593,8 +593,12 @@ class ReviewerAI(BaseAIComponent):
                 result_dict['created_at'] = result_dict['created_at'].isoformat()
             serializable_history.append(result_dict)
 
-        os.makedirs(os.path.dirname(self.output_dir), exist_ok=True)
-        with open(os.path.join(self.output_dir, "evaluation_history.json"), 'w', encoding='utf-8') as f:
+        # タイムスタンプを含むファイル名を生成
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        filename = f"evaluation_history_{timestamp}.json"
+        
+        os.makedirs(self.output_dir, exist_ok=True)
+        with open(os.path.join(self.output_dir, filename), 'w', encoding='utf-8') as f:
             json.dump(serializable_history, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
