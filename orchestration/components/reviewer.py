@@ -289,14 +289,20 @@ class ReviewerAI(BaseAIComponent):
             total_score = self._calculate_overall_score(metrics)
             feedback = await self._extract_feedback(llm_response)
             
-            # EvaluationResultオブジェクトを作成して返す
-            return EvaluationResult(
+            # EvaluationResultオブジェクトを作成
+            evaluation_result = EvaluationResult(
                 task_id=task_obj.id,
                 status=TaskStatus.COMPLETED,
                 score=total_score,
                 feedback=feedback,
-                metrics=metrics.model_dump()
+                metrics=metrics.model_dump(),
+                created_at=datetime.now()  # created_atを明示的に設定
             )
+            
+            # 評価履歴に追加
+            self.evaluation_history.append(evaluation_result)
+            
+            return evaluation_result
             
         except Exception as e:
             error_msg = f"タスク評価中にエラーが発生しました: {str(e)}"
@@ -575,20 +581,21 @@ class ReviewerAI(BaseAIComponent):
         return " ".join(feedback_parts)
     
     def save_evaluation_history(self) -> None:
-        """評価履歴をJSONファイルとして保存する"""
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
-            
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(self.output_dir, f"evaluation_history_{timestamp}.json")
-        
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(
-                [evaluation.model_dump() for evaluation in self.evaluation_history],
-                f,
-                ensure_ascii=False,
-                indent=2
-            )
+        """評価履歴をJSONファイルに保存する"""
+        if not self.evaluation_history:
+            return
+
+        # Convert datetime objects to ISO format strings
+        serializable_history = []
+        for result in self.evaluation_history:
+            result_dict = result.model_dump()
+            if result_dict.get('created_at'):
+                result_dict['created_at'] = result_dict['created_at'].isoformat()
+            serializable_history.append(result_dict)
+
+        os.makedirs(os.path.dirname(self.output_dir), exist_ok=True)
+        with open(os.path.join(self.output_dir, "evaluation_history.json"), 'w', encoding='utf-8') as f:
+            json.dump(serializable_history, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
     pass 

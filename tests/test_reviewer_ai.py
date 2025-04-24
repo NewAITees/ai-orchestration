@@ -99,8 +99,12 @@ async def test_reviewer_task_evaluation(reviewer, test_task, test_result, test_d
     assert isinstance(result1.feedback, str)
     assert isinstance(result1.metrics, dict)
     
-    # 同じ入力に対して同じ結果が得られることを確認
-    assert result1.model_dump() == result2.model_dump()
+    # 同じ入力に対して同じ結果が得られることを確認（created_atを除外）
+    result1_dict = result1.model_dump()
+    result2_dict = result2.model_dump()
+    result1_dict.pop('created_at', None)
+    result2_dict.pop('created_at', None)
+    assert result1_dict == result2_dict
     
     # 評価履歴の保存を確認
     reviewer.save_evaluation_history()
