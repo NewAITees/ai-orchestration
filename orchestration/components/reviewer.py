@@ -286,32 +286,17 @@ class ReviewerAI(BaseAIComponent):
             
             # 評価結果を生成
             metrics = await self._calculate_metrics(task_obj, None, llm_response)
-            suggestions = await self._extract_suggestions(llm_response)
+            total_score = self._calculate_overall_score(metrics)
+            feedback = await self._extract_feedback(llm_response)
             
-            # 完了度と品質を評価
-            completeness_score = self._evaluate_completeness(task_obj, None)
-            quality_score = self._evaluate_quality(task_obj, None)
-            
-            # 総合スコアを計算
-            total_score = (completeness_score + quality_score) / 2.0
-            
-            # フィードバックを生成
-            feedback = self._generate_feedback(task_obj, None, metrics, total_score)
-            
-            # 評価結果を作成
-            evaluation = EvaluationResult(
+            # EvaluationResultオブジェクトを作成して返す
+            return EvaluationResult(
                 task_id=task_obj.id,
                 status=TaskStatus.COMPLETED,
                 score=total_score,
                 feedback=feedback,
-                metrics=metrics
+                metrics=metrics.model_dump()
             )
-            
-            # 評価履歴に追加
-            self.evaluation_history.append(evaluation)
-            
-            logger.info(f"タスク評価完了: {task_obj.id}")
-            return evaluation
             
         except Exception as e:
             error_msg = f"タスク評価中にエラーが発生しました: {str(e)}"
@@ -471,6 +456,18 @@ class ReviewerAI(BaseAIComponent):
         except Exception as e:
             logger.warning(f"提案抽出に失敗: {str(e)}", exc_info=True)
             return []
+    
+    async def _extract_feedback(self, llm_response: str) -> str:
+        """LLMの応答からフィードバックを抽出する"""
+        try:
+            response_data = await self.llm_manager.parse_json_response(llm_response)
+            feedback = response_data.get("feedback", "")
+            if not feedback:
+                feedback = "評価は完了しましたが、詳細なフィードバックは生成されませんでした。"
+            return feedback
+        except Exception as e:
+            logger.warning(f"フィードバック抽出に失敗: {str(e)}", exc_info=True)
+            return "評価処理中にエラーが発生しました。"
     
     def _create_evaluator(self) -> BaseLLMManager:
         """評価用のLLMクライアントを作成"""

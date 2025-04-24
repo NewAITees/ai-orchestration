@@ -113,6 +113,36 @@ class SubtaskResultDict(TypedDict):
     metadata: Dict[str, Any]
 
 
+class EvaluationResult(BaseModel):
+    """タスク評価結果のモデル"""
+    task_id: str = Field(..., description="評価対象のタスクID")
+    status: TaskStatus = Field(..., description="評価のステータス")
+    score: float = Field(..., ge=0.0, le=1.0, description="評価スコア")
+    feedback: str = Field(..., description="評価フィードバック")
+    metrics: Dict[str, float] = Field(default_factory=dict, description="評価メトリクス")
+    created_at: datetime = Field(default_factory=datetime.now, description="評価実施日時")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "task_id": "task_123",
+                    "status": TaskStatus.COMPLETED,
+                    "score": 0.85,
+                    "feedback": "タスクは概ね完了していますが、改善の余地があります。",
+                    "metrics": {
+                        "quality": 0.8,
+                        "completeness": 0.9,
+                        "relevance": 0.85
+                    }
+                }
+            ]
+        }
+    )
+
+
 class EvaluationFeedbackDict(TypedDict):
     """評価フィードバックの辞書形式"""
     evaluation: EvaluationResult
@@ -225,6 +255,10 @@ class TaskModel(BaseModel):
             self.completed_at = datetime.now()
 
 
+# TaskModelの別名としてTaskを定義（後方互換性のため）
+Task = TaskModel
+
+
 class TaskStatusModel(BaseModel):
     """タスクステータスの詳細モデル"""
     task_id: str
@@ -253,6 +287,10 @@ class TaskExecutionResult(BaseModel):
     feedback: Optional[str] = None
     metrics: Optional[Dict[str, float]] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+# TaskExecutionResultの別名としてTaskResultを定義（後方互換性のため）
+TaskResult = TaskExecutionResult
 
 
 class SubTask(BaseModel):
@@ -441,35 +479,6 @@ class FinalResult(BaseModel):
                         "completion_time": 120.5
                     },
                     "improvements": []
-                }
-            ]
-        }
-    )
-
-class EvaluationResult(BaseModel):
-    """タスク評価結果のモデル"""
-    task_id: str = Field(..., description="評価対象のタスクID")
-    status: TaskStatus = Field(..., description="評価のステータス")
-    score: float = Field(..., ge=0.0, le=1.0, description="評価スコア")
-    feedback: str = Field(..., description="評価フィードバック")
-    metrics: Dict[str, float] = Field(default_factory=dict, description="評価メトリクス")
-    created_at: datetime = Field(default_factory=datetime.now, description="評価実施日時")
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        validate_assignment=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "task_id": "task_123",
-                    "status": TaskStatus.COMPLETED,
-                    "score": 0.85,
-                    "feedback": "タスクは概ね完了していますが、改善の余地があります。",
-                    "metrics": {
-                        "quality": 0.8,
-                        "completeness": 0.9,
-                        "relevance": 0.85
-                    }
                 }
             ]
         }

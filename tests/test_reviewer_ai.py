@@ -119,7 +119,7 @@ async def test_reviewer_task_evaluation(reviewer, test_task, test_result, test_d
 @pytest.mark.asyncio
 async def test_evaluate_task(reviewer, test_task):
     """evaluate_taskメソッドの非同期テスト"""
-    evaluation = await reviewer.evaluate_task(test_task.id, test_task.description)
+    evaluation = await reviewer.evaluate_task(test_task, test_task.description)
     
     assert isinstance(evaluation, EvaluationResult)
     assert evaluation.task_id == test_task.id
