@@ -336,7 +336,7 @@ class ReviewerAI(BaseAIComponent):
             }
             
             # LLMを使用して改善提案を生成
-            template_path = "reviewer/improvement_suggestions.prompt"
+            template_path = "orchestration/prompts/reviewer/improvement_suggestions.prompt"
             response = await self._generate_with_template(template_path, context)
             
             # レスポンスから改善提案を抽出
