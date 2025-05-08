@@ -22,6 +22,7 @@ async def test_director_integration():
     
     # テスト用のセッション作成
     session = Session(id="test-director-session")
+    session.mode = "creative"  # テンプレート名に合わせて明示的に設定
     
     # LLMManager初期化 (temperature=0 で決定論的な応答を得る)
     llm_manager = LLMManager(

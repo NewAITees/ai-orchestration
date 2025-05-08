@@ -24,10 +24,10 @@ def test_dir():
     dir_path.mkdir(parents=True, exist_ok=True)
     yield dir_path
     # クリーンアップ: テストデータの削除
-    for file in dir_path.glob("*.json"):
-        file.unlink()
-    if dir_path.exists():
-        dir_path.rmdir()
+    # for file in dir_path.glob("*.json"):
+    #     file.unlink()
+    # if dir_path.exists():
+    #     dir_path.rmdir()
 
 @pytest.fixture
 def session():

@@ -5,6 +5,7 @@ import sys
 import time
 import pytest
 import subprocess
+import glob
 
 # テストモジュールをインポート
 from tests.test_director_ai import test_director_integration
@@ -89,9 +90,12 @@ async def run_all_tests():
             "message": "テストが成功しました" if reviewer_success else "テストが失敗しました",
             "results_dir": str(base_dir / "reviewer_test_data")
         }
-        if not reviewer_success:
-            print(result.stdout)
-            print(result.stderr)
+        # 出力ファイルの有無を確認
+        reviewer_files = glob.glob("./tests/reviewer_test_data/evaluation_history_*.json")
+        if not reviewer_files:
+            print("[WARNING] Reviewerテストの出力ファイルが生成されていません。テストコードやパスを確認してください。")
+        else:
+            print(f"Reviewerテスト出力ファイル: {reviewer_files[-1]}")
     except Exception as e:
         print(f"Reviewer AIテスト実行エラー: {e}")
         test_results["reviewer"] = {

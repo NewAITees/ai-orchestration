@@ -186,7 +186,7 @@ def get_component_specific_parameters(
         # Planner: 分析と構造化に特化
         return {
             **base_params,
-            "temperature": max(0.4, base_params["temperature"] - 0.1),
+            "temperature": 0.0,  # 決定論的出力を担保
         }
     elif component_type == ComponentType.WORKER:
         # Worker: 実際の創造作業を行う（モード設定を尊重）

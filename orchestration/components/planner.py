@@ -100,7 +100,7 @@ class PlannerAI(BaseAIComponent):
             
             # LLMを使用して計画を生成
             template_id = f"planner/{task_type}_planning"
-            result_content = await self.llm_manager.generate_with_template(template_id, variables)
+            result_content = await self.llm_manager.generate_with_template(template_id, variables, temperature=0.0)
             
             # 結果の解析（JSONの抽出）
             parsed_result = await self.llm_manager.parse_json_response(result_content)
