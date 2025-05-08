@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from backend.app.api.router import api_router
-from backend.app.core.config import settings
+from .config import settings
 from .core.session import Session
 from .llm.llm_manager import LLMManager
 from .factory import AIComponentFactory
 from .cui.novel_writer import NovelWriter
+import asyncio
 
 app = FastAPI(
     title="General AI Playground API",
@@ -17,14 +17,11 @@ app = FastAPI(
 # CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=getattr(settings, 'CORS_ORIGINS', ["*"]),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# APIルーターの追加
-app.include_router(api_router, prefix="/api")
 
 @app.get("/")
 async def root():
@@ -58,9 +55,9 @@ app.openapi = custom_openapi
 def start_app():
     """エントリーポイント関数: poetry run app コマンドで実行されます"""
     import uvicorn
-    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("orchestration.main:app", host="0.0.0.0", port=8000, reload=True)
 
-def run_novel_writer(args=None):
+async def run_novel_writer(args=None):
     """小説作成アプリを実行"""
     # セッション初期化
     session = Session()
@@ -75,7 +72,7 @@ def run_novel_writer(args=None):
     
     # 小説作成システム実行
     writer = NovelWriter(session, components)
-    writer.run()
+    await writer.run()
 
 if __name__ == "__main__":
-    run_novel_writer() 
+    asyncio.run(run_novel_writer()) 

@@ -2,13 +2,13 @@ from typing import List, Optional, Callable, Dict
 import sys
 import asyncio
 from dataclasses import dataclass, field
-from app.orchestration.core.session import Session, Task, TaskStatus, SubTask
-from app.orchestration.components.director import DefaultDirectorAI
-from app.orchestration.components.reviewer import ReviewerAI
-from app.orchestration.components.planner import DefaultPlannerAI
-from app.orchestration.components.worker import DefaultWorkerAI
-from app.llm.llm_manager import LLMManager
-from app.orchestration.core.message import OrchestrationMessage, MessageType, Component
+from ..core.session import Session, TaskStatus, SubTask
+from ..types import Task, OrchestrationMessage, MessageType, Component
+from ..components.director import DirectorAI
+from ..components.reviewer import ReviewerAI
+from ..components.planner import PlannerAI
+from ..components.worker import WorkerAI
+from ..llm.llm_manager import LLMManager
 import uuid
 
 @dataclass
@@ -119,20 +119,20 @@ class NovelWriter:
     async def _execute_tasks(self):
         """タスク実行"""
         worker = self.components["worker"]
-        evaluator = self.components["evaluator"]
+        reviewer = self.components["reviewer"]
         
         for task_id, task in self.session.subtasks.items():
             self.output_func(f"\n=== タスク「{task.title}」を実行中... ===")
             
             # 実行
             result = await worker.execute_task(task)
-            task.result = result["content"]
+            task.result = result.result
             
             # 評価
-            evaluation = await evaluator.evaluate_task(task)
+            evaluation = await reviewer.evaluate_task(task)
             
-            self.output_func(f"\n評価スコア: {evaluation['score']}")
-            self.output_func(f"フィードバック: {evaluation['feedback']}")
+            self.output_func(f"\n評価スコア: {evaluation.score}")
+            self.output_func(f"フィードバック: {evaluation.feedback}")
             
             # 完了
             task.update_status(TaskStatus.COMPLETED)
@@ -177,17 +177,17 @@ async def main():
     # セッションとコンポーネントの初期化
     session = Session(id="novel-session")
     llm_manager = LLMManager()
-    director = DefaultDirectorAI(session, llm_manager)
-    evaluator = ReviewerAI(session, llm_manager)
-    planner = DefaultPlannerAI(session, llm_manager)
-    worker = DefaultWorkerAI(session, llm_manager)
+    director = DirectorAI(session, llm_manager)
+    reviewer = ReviewerAI(session, llm_manager)
+    planner = PlannerAI(session, llm_manager)
+    worker = WorkerAI(session, llm_manager)
     
     # 小説作成システムの実行
     writer = NovelWriter(
         session=session,
         components={
             "director": director,
-            "evaluator": evaluator,
+            "reviewer": reviewer,
             "planner": planner,
             "worker": worker
         }
