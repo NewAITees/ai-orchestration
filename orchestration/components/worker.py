@@ -10,7 +10,7 @@ import json
 import traceback
 import asyncio
 
-from ..types import (
+from ..ai_types import (
     TaskStatus, TaskExecutionResult, SubTask, 
     IWorkerAI, BaseAIComponent, Component,
     MessageType, OrchestrationMessage

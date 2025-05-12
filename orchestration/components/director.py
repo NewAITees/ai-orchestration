@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, TYPE_CHECKING, Union, Protocol
 from ..core.session import Session, SubTask, SessionStatus
-from ..types import TaskStatus, TaskStatusModel, OrchestrationMessage, MessageType, Component, TaskID, SubTask, FinalResult, TaskModel, TaskExecutionResult, SubtaskID
-from ..types import OrchestrationMessage, Component
+from ..ai_types import TaskStatus, TaskStatusModel, OrchestrationMessage, MessageType, Component, TaskID, SubTask, FinalResult, TaskModel, TaskExecutionResult, SubtaskID
+from ..ai_types import OrchestrationMessage, Component
 from ..llm import LLMManager
 from .base import BaseAIComponent
 import json

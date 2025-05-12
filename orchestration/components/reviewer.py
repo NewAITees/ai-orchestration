@@ -10,8 +10,9 @@ import asyncio
 import re
 from pathlib import Path
 import os
+import enum
 
-from ..types import (
+from ..ai_types import (
     TaskStatus, SubtaskStatus, ReviewResult, SubTask, 
     IReviewerAI, BaseAIComponent, Component,
     MessageType, OrchestrationMessage, TaskExecutionResult,
@@ -29,12 +30,12 @@ class ReviewerError(Exception):
     """Reviewer AIの例外クラス"""
     pass
 
-class TaskType(Enum):
+class TaskType(enum.Enum):
     """タスクタイプの定義"""
-    CREATIVE = auto()
-    CODING = auto()
-    ANALYSIS = auto()
-    GENERIC = auto()
+    CREATIVE = enum.auto()
+    CODING = enum.auto()
+    ANALYSIS = enum.auto()
+    GENERIC = enum.auto()
 
 class EvaluationMetrics(BaseModel):
     """評価メトリクスのモデル"""

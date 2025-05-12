@@ -14,7 +14,7 @@ from difflib import get_close_matches
 
 from ..agno_client import AgnoClient
 from ..config import settings
-from ..types import ModelName
+from ..ai_types import ModelName
 
 class PromptTemplate:
     """プロンプトテンプレート管理"""

@@ -1,12 +1,12 @@
 import uuid
 from typing import Dict, List, Optional, Any,  TypedDict, TYPE_CHECKING
 from datetime import datetime
-from enum import Enum, auto
+import enum
 import json
 import os
 from pydantic import BaseModel, Field, ValidationError
 from pathlib import Path
-from ..types import (
+from ..ai_types import (
     TaskStatus, SubtaskStatus,
      SubtaskID, SessionID, FeedbackID, ModelName,
     SubTask
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..factory import AIComponentFactory
     from ..commands import CommandDispatcher
 
-class SubtaskStatus(str, Enum):
+class SubtaskStatus(str, enum.Enum):
     """サブタスクの状態"""
     PENDING = "pending"           # 待機中
     BLOCKED = "blocked"           # ブロック中（依存関係）
@@ -32,7 +32,7 @@ class SubtaskStatus(str, Enum):
     COMPLETED = "completed"       # 完了
     FAILED = "failed"             # 失敗
 
-class SessionStatus(str, Enum):
+class SessionStatus(str, enum.Enum):
     """セッションの状態を表す列挙型"""
     PENDING = "pending"
     RUNNING = "running"

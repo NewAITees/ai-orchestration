@@ -3,7 +3,7 @@ import sys
 import asyncio
 from dataclasses import dataclass, field
 from ..core.session import Session, TaskStatus, SubTask
-from ..types import Task, OrchestrationMessage, MessageType, Component
+from ..ai_types import Task, OrchestrationMessage, MessageType, Component
 from ..components.director import DirectorAI
 from ..components.reviewer import ReviewerAI
 from ..components.planner import PlannerAI

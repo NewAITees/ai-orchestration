@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     # Import Session from the correct location
     from ..core.session import Session
     # Import necessary types/models from types.py
-    from ..types import SubTask, TaskExecutionResult, TaskModel, TaskStatus, SubtaskStatus
+    from ..ai_types import SubTask, TaskExecutionResult, TaskModel, TaskStatus, SubtaskStatus
     # Import Base classes for components (assuming they exist in components.base or specific files)
     # It might be better to import the specific protocols/interfaces if available
     from ..components.base import BasePlannerAI, BaseWorkerAI # Adjust path if needed

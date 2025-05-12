@@ -1,17 +1,17 @@
-from enum import Enum, auto
+import enum
 from typing import Dict, List, Optional, Any, Union, Literal, TypedDict, Protocol, runtime_checkable
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from abc import ABC, abstractmethod
 
-class OrchestratorMode(str, Enum):
+class OrchestratorMode(str, enum.Enum):
     """オーケストレーションモード"""
     CREATIVE = "creative"  # 創作モード
     CODING = "coding"      # コーディングモード
     RESEARCH = "research"  # 調査モード
 
 
-class ComponentType(str, Enum):
+class ComponentType(str, enum.Enum):
     """AIコンポーネントの種類"""
     DIRECTOR = "director"  # 指示・統合担当
     PLANNER = "planner"    # 計画立案担当
@@ -19,19 +19,19 @@ class ComponentType(str, Enum):
     REVIEWER = "reviewer"  # 評価担当
 
 
-class DirectorMode(str, Enum):
+class DirectorMode(str, enum.Enum):
     """Director AIの動作モード"""
     CONTROL = "control"          # 制御モード
     INTEGRATION = "integration"  # 統合モード
 
 
-class ReviewerMode(str, Enum):
+class ReviewerMode(str, enum.Enum):
     """Reviewer AIの評価モード"""
     DECOMPOSITION = "decomposition"  # 分解評価モード
     RESULT = "result"                # 結果評価モード
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(str, enum.Enum):
     """タスクの状態"""
     PENDING = "pending"           # 待機中
     PLANNING = "planning"         # 計画中
@@ -43,7 +43,7 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"       # キャンセル
 
 
-class SubtaskStatus(str, Enum):
+class SubtaskStatus(str, enum.Enum):
     """サブタスクの状態"""
     PENDING = "pending"           # 待機中
     BLOCKED = "blocked"           # ブロック中（依存関係）
@@ -54,7 +54,7 @@ class SubtaskStatus(str, Enum):
     FAILED = "failed"             # 失敗
 
 
-class ProcessPhase(str, Enum):
+class ProcessPhase(str, enum.Enum):
     """処理フェーズ"""
     TASK_DECOMPOSITION = "task_decomposition"  # タスク分解
     USER_FEEDBACK = "user_feedback"            # ユーザーフィードバック
@@ -62,14 +62,14 @@ class ProcessPhase(str, Enum):
     RESULT_INTEGRATION = "result_integration"  # 結果統合
 
 
-class EvaluationStatus(str, Enum):
+class EvaluationStatus(str, enum.Enum):
     """評価結果のステータス"""
     PASS = "pass"                # 合格
     FAIL = "fail"                # 不合格
     PARTIAL = "partial"          # 部分的に合格
 
 
-class ErrorLevel(str, Enum):
+class ErrorLevel(str, enum.Enum):
     """エラーレベル"""
     INFO = "info"
     WARNING = "warning"
@@ -77,7 +77,7 @@ class ErrorLevel(str, Enum):
     CRITICAL = "critical"
 
 
-class ToolType(str, Enum):
+class ToolType(str, enum.Enum):
     """ツールの種類"""
     SEARCH = "search"            # 検索ツール
     CODE_EXECUTION = "code_execution"  # コード実行ツール
@@ -205,7 +205,7 @@ class OrchestratorRequest(TypedDict, total=False):
     params: Optional[Dict[str, Any]]     # その他のパラメータ
 
 
-class MessageType(str, Enum):
+class MessageType(str, enum.Enum):
     """メッセージタイプ"""
     COMMAND = "command"
     RESPONSE = "response"
@@ -215,7 +215,7 @@ class MessageType(str, Enum):
     QUERY = "query"
 
 
-class Component(str, Enum):
+class Component(str, enum.Enum):
     """コンポーネント"""
     DIRECTOR = "director"
     WORKER = "worker"

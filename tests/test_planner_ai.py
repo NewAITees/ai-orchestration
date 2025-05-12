@@ -7,7 +7,7 @@ from pathlib import Path
 from orchestration.llm.llm_manager import LLMManager
 from orchestration.components.planner import PlannerAI
 from orchestration.core.session import Session
-from orchestration.types import TaskModel
+from orchestration.ai_types import TaskModel
 
 async def test_planner_task_planning():
     """

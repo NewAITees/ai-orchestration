@@ -8,7 +8,7 @@ from pathlib import Path
 from orchestration.llm.llm_manager import LLMManager
 from orchestration.components.reviewer import ReviewerAI
 from orchestration.core.session import Session
-from orchestration.types import (
+from orchestration.ai_types import (
     TaskStatus,
     SubtaskStatus,
     SubTask,

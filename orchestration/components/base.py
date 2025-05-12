@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 # --- 型定義とLLMマネージャーのインポート ---
 # types.py から必要なものをインポート
 # TaskStatus, TaskExecutionResult, TaskModel, SubTask を追加
-from ..types import OrchestrationMessage, MessageType, Component, TaskStatus, TaskExecutionResult, TaskModel, SubTask, SubtaskID, TaskID, TaskStatusModel, PlanningResult, EvaluationResult, FinalResult, Improvement
+from ..ai_types import OrchestrationMessage, MessageType, Component, TaskStatus, TaskExecutionResult, TaskModel, SubTask, SubtaskID, TaskID, TaskStatusModel, PlanningResult, EvaluationResult, FinalResult, Improvement
 # llm パッケージから BaseLLMManager をインポート (パスが正しいか確認)
 from ..llm.llm_manager import BaseLLMManager
 
