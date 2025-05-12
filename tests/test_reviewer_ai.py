@@ -152,7 +152,7 @@ async def test_suggest_improvements(reviewer, test_task, test_result):
 async def test_calculate_metrics(reviewer, test_task, test_result):
     """_calculate_metricsメソッドの非同期テスト"""
     llm_response = await reviewer._generate_with_template(
-        "orchestration/prompts/reviewer/evaluate.prompt",
+        "reviewer/evaluate",
         {"task": test_task.model_dump(), "result": test_result.model_dump()}
     )
     metrics = await reviewer._calculate_metrics(test_task, test_result, llm_response)

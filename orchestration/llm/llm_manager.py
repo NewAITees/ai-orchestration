@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional, Union, AsyncGenerator
 from pathlib import Path
 from datetime import datetime
 import json
+from difflib import get_close_matches
 
 from ..agno_client import AgnoClient
 from ..config import settings
@@ -106,7 +107,11 @@ class PromptTemplateLoader:
             ValueError: テンプレートが見つからない場合
         """
         if template_id not in self.templates:
-            raise ValueError(f"テンプレート {template_id} が見つかりません")
+            # 近い候補を出力
+            candidates = get_close_matches(template_id, list(self.templates.keys()), n=3, cutoff=0.5)
+            error_msg = f"テンプレート {template_id} が見つかりません。候補: {candidates}\n現在登録済み: {list(self.templates.keys())}"
+            print(error_msg)
+            raise ValueError(error_msg)
         
         return self.templates[template_id]
     

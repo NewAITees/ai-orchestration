@@ -336,8 +336,8 @@ class ReviewerAI(BaseAIComponent):
             }
             
             # LLMを使用して改善提案を生成
-            template_path = "orchestration/prompts/reviewer/improvement_suggestions.prompt"
-            response = await self._generate_with_template(template_path, context)
+            template_id = "reviewer/improvement_suggestions"
+            response = await self._generate_with_template(template_id, context)
             
             # レスポンスから改善提案を抽出
             improvements = []
@@ -477,11 +477,11 @@ class ReviewerAI(BaseAIComponent):
     
     def _create_evaluator(self) -> BaseLLMManager:
         """評価用のLLMクライアントを作成"""
-        return self._create_llm_client("reviewer/evaluate.prompt")
+        return self._create_llm_client("reviewer/evaluate")
     
     def _create_reviewer(self) -> BaseLLMManager:
         """改善提案用のLLMクライアントを作成"""
-        return self._create_llm_client("reviewer/improve.prompt")
+        return self._create_llm_client("reviewer/improve")
     
     def _create_evaluation_prompt(self, task: SubTask, result: Optional[TaskExecutionResult]) -> str:
         """評価プロンプトを生成"""
