@@ -1,0 +1,184 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  UV_CACHE_DIR: /tmp/.uv-cache
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff format check
+        run: uv run ruff format --check --diff .
+
+      - name: Run ruff lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Run type checking
+        run: uv run mypy orchestration/
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest \
+            --cov=orchestration \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run bandit security linter
+        run: uv run bandit -r orchestration/ -f json -o bandit-report.json
+        continue-on-error: true
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+      - name: Run safety check
+        run: uv run safety check --json --output safety-report.json
+        continue-on-error: true
+
+      - name: Upload safety report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: safety-report
+          path: safety-report.json
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Wait for Ollama to be ready
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:11434/api/version; do sleep 2; done'
+
+      - name: Pull test model
+        run: |
+          curl -X POST http://localhost:11434/api/pull \
+            -H "Content-Type: application/json" \
+            -d '{"name": "gemma2:2b"}'
+
+      - name: Run integration tests
+        env:
+          OLLAMA_HOST: localhost
+          OLLAMA_PORT: 11434
+          ORCHESTRATOR_DEFAULT_MODEL: gemma2:2b
+        run: |
+          uv run pytest -m integration -v
+
+  build-docs:
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Build documentation
+        run: |
+          uv run mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+
+  quality-gate:
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: always()
+
+    steps:
+      - name: Check test results
+        if: needs.test.result != 'success'
+        run: |
+          echo "Tests failed"
+          exit 1
+
+      - name: Check security scan results
+        if: needs.security.result == 'failure'
+        run: |
+          echo "Security scan found critical issues"
+          exit 1
+
+      - name: Quality gate passed
+        run: |
+          echo "All quality checks passed"

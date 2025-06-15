@@ -5,4 +5,4 @@
 
 from .novel_writer import NovelWriter
 
-__all__ = ['NovelWriter']
+__all__ = ["NovelWriter"]

@@ -29,7 +29,7 @@ graph TD
     User[ユーザー] -->|テーマ入力| CUI[CUIインターフェース]
     CUI -->|入力処理| SessionManager[セッションマネージャー]
     SessionManager -->|タスク管理| Orchestrator[オーケストレーター]
-    
+
     subgraph AIコンポーネント
         Director[Director AI] -->|タスク分解・統合| Planner[Planner AI]
         Planner -->|実行計画| Worker[Worker AI]
@@ -37,7 +37,7 @@ graph TD
         Reviewer -->|フィードバック| Worker
         Director -->|最終統合| FinalResult[最終結果]
     end
-    
+
     Orchestrator <-->|コマンド実行| Director
     FinalResult -->|小説結果| CUI
     CUI -->|出力| User
@@ -46,14 +46,16 @@ graph TD
 ### 2.2 コンポーネント詳細
 
 #### Director AI
+
 - 役割: 全体のプロセス制御と結果の統合
-- 主要機能: 
+- 主要機能:
   - タスク分解の監督
   - サブタスク実行の調整
   - 執筆結果の統合
   - 全体的な一貫性の確保
 
 #### Planner AI
+
 - 役割: 小説構造の計画立案
 - 主要機能:
   - プロット設計
@@ -62,6 +64,7 @@ graph TD
   - チャプター分割
 
 #### Worker AI
+
 - 役割: 実際の小説執筆
 - 主要機能:
   - プランに基づく章ごとの執筆
@@ -70,6 +73,7 @@ graph TD
   - ナラティブの構築
 
 #### Reviewer AI
+
 - 役割: 品質評価とフィードバック
 - 主要機能:
   - 文章の一貫性チェック
@@ -87,7 +91,7 @@ sequenceDiagram
     participant Plan as Planner AI
     participant Work as Worker AI
     participant Rev as Reviewer AI
-    
+
     User->>CUI: テーマ入力
     CUI->>Dir: セッション作成・タスク依頼
     Dir->>Plan: 小説計画依頼
@@ -111,18 +115,21 @@ sequenceDiagram
 ### 3.1 フェーズ分け
 
 #### フェーズ1: 基本システム構築（現在）
+
 - 基本的なオーケストレーションの仕組み構築
 - 4つのAIコンポーネントの実装
 - CUIインターフェースの基本機能
 - 単一セッションでの小説生成
 
 #### フェーズ2: 機能拡張
+
 - 検索機能の追加による事実情報の活用
 - 複数セッションの管理機能
 - ユーザーフィードバックの取り込み
 - 生成結果のエクスポート機能
 
 #### フェーズ3: 高度化・最適化
+
 - パフォーマンス最適化
 - 複数ジャンル対応の強化
 - APIインターフェースの提供
@@ -202,7 +209,7 @@ sequenceDiagram
 FUNCTION SendCommandToComponent(sender, receiver, action, params)
     // 入力: 送信者、受信者、アクション名、パラメータ
     // 出力: レスポンスメッセージ
-    
+
     message = OrchestrationMessage(
         type=MessageType.COMMAND,
         sender=sender,
@@ -213,7 +220,7 @@ FUNCTION SendCommandToComponent(sender, receiver, action, params)
         },
         session_id=current_session.id
     )
-    
+
     response = receiver.process_message(message)
     RETURN response
 END FUNCTION
@@ -227,16 +234,16 @@ END FUNCTION
 FUNCTION GenerateNovel(theme, requirements)
     // 入力: 小説のテーマ、追加要件
     // 出力: 生成された小説
-    
+
     // 1. セッション作成
     session = CreateSession()
-    
+
     // 2. AIコンポーネント初期化
     director = CreateDirectorAI(session)
     planner = CreatePlannerAI(session)
     worker = CreateWorkerAI(session)
     reviewer = CreateReviewerAI(session)
-    
+
     // 3. タスク定義
     main_task = CreateTask(
         title="小説生成",
@@ -244,10 +251,10 @@ FUNCTION GenerateNovel(theme, requirements)
         requirements=requirements
     )
     session.add_task(main_task)
-    
+
     // 4. Director AIによる実行プロセス開始
     result = director.execute_process(main_task.id)
-    
+
     RETURN result
 END FUNCTION
 ```
@@ -262,16 +269,16 @@ graph TD
     A --> C[統合テスト]
     A --> D[システムテスト]
     A --> E[受け入れテスト]
-    
+
     B --> B1[AIコンポーネント個別テスト]
     B --> B2[メッセージング機能テスト]
-    
+
     C --> C1[コンポーネント間連携テスト]
     C --> C2[プロセスフローテスト]
-    
+
     D --> D1[小説生成 E2Eテスト]
     D --> D2[エラー処理テスト]
-    
+
     E --> E1[ユーザーストーリーテスト]
     E --> E2[非機能要件テスト]
 ```
@@ -285,13 +292,13 @@ graph TD
 FUNCTION TestDirectorIntegration()
     // 入力: なし
     // 出力: テスト結果
-    
+
     // テスト用セッション作成
     session = CreateTestSession()
-    
+
     // Directorコンポーネント作成
     director = CreateDirectorAI(session)
-    
+
     // テスト用サブタスク結果作成
     test_results = [
         {
@@ -300,19 +307,19 @@ FUNCTION TestDirectorIntegration()
             "result": "サブタスク1の結果"
         },
         {
-            "task_id": "subtask-2", 
+            "task_id": "subtask-2",
             "status": "completed",
             "result": "サブタスク2の結果"
         }
     ]
-    
+
     // 結果統合をテスト
     integrated_result = director.integrate_results(test_results)
-    
+
     // 結果検証
     ASSERT integrated_result IS NOT NULL
     ASSERT integrated_result.status == "completed"
-    
+
     RETURN TestResult(success=true)
 END FUNCTION
 ```
@@ -321,15 +328,15 @@ END FUNCTION
 
 ### 6.1 タイムライン
 
-| フェーズ | 作業内容 | 期間 |
-|---------|---------|------|
-| 準備 | プロジェクト設定、依存関係定義 | 1週間 |
-| 基盤実装 | コアモジュール、型定義、基本クラス | 2週間 |
-| コンポーネント実装 | 4つのAIコンポーネントの実装 | 3週間 |
-| CUI実装 | コマンドラインインターフェース実装 | 1週間 |
-| テスト | 単体テスト、統合テスト | 2週間 |
-| デバッグ・改良 | 問題修正、パフォーマンス改善 | 2週間 |
-| ドキュメント作成 | 利用マニュアル、API仕様書 | 1週間 |
+| フェーズ           | 作業内容                           | 期間  |
+| ------------------ | ---------------------------------- | ----- |
+| 準備               | プロジェクト設定、依存関係定義     | 1週間 |
+| 基盤実装           | コアモジュール、型定義、基本クラス | 2週間 |
+| コンポーネント実装 | 4つのAIコンポーネントの実装        | 3週間 |
+| CUI実装            | コマンドラインインターフェース実装 | 1週間 |
+| テスト             | 単体テスト、統合テスト             | 2週間 |
+| デバッグ・改良     | 問題修正、パフォーマンス改善       | 2週間 |
+| ドキュメント作成   | 利用マニュアル、API仕様書          | 1週間 |
 
 ### 6.2 優先タスク
 
@@ -342,13 +349,13 @@ END FUNCTION
 
 ## 7. リスクと対策
 
-| リスク | 影響度 | 対策 |
-|-------|-------|------|
-| LLMの応答遅延 | 高 | 非同期処理の実装、タイムアウト管理 |
-| コンテキスト長の制限 | 高 | チャンキング戦略、階層的な構造化 |
-| AIコンポーネント間の不整合 | 中 | 厳格なスキーマ定義、データ検証 |
-| LLMのバージョン依存性 | 中 | 抽象化レイヤーの導入、互換性テスト |
-| メモリ使用量の増大 | 中 | リソース監視、最適化戦略 |
+| リスク                     | 影響度 | 対策                               |
+| -------------------------- | ------ | ---------------------------------- |
+| LLMの応答遅延              | 高     | 非同期処理の実装、タイムアウト管理 |
+| コンテキスト長の制限       | 高     | チャンキング戦略、階層的な構造化   |
+| AIコンポーネント間の不整合 | 中     | 厳格なスキーマ定義、データ検証     |
+| LLMのバージョン依存性      | 中     | 抽象化レイヤーの導入、互換性テスト |
+| メモリ使用量の増大         | 中     | リソース監視、最適化戦略           |
 
 ## 8. 今後の展望
 

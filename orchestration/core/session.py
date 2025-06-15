@@ -1,76 +1,94 @@
-import uuid
-from typing import Dict, List, Optional, Any,  TypedDict, TYPE_CHECKING
-from datetime import datetime
 import enum
 import json
 import os
-from pydantic import BaseModel, Field, ValidationError
+import uuid
+from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypedDict
+
+from pydantic import BaseModel, Field, ValidationError
+
 from ..ai_types import (
-    TaskStatus, SubtaskStatus,
-     SubtaskID, SessionID, FeedbackID, ModelName,
-    SubTask
+    FeedbackID,
+    ModelName,
+    SessionID,
+    SubTask,
+    SubtaskID,
+    SubtaskStatus,
+    TaskStatus,
 )
 
 # --- 共通ユーティリティと型定義のインポート ---
-from ..utils.common import generate_id, json_serialize, json_deserialize
+from ..utils.common import generate_id, json_deserialize, json_serialize
 
 # --- 循環参照回避のためのインポート ---
 if TYPE_CHECKING:
-    from ..components.base import BaseAIComponent
-    from ..llm.llm_manager import BaseLLMManager
-    from ..factory import AIComponentFactory
     from ..commands import CommandDispatcher
+    from ..components.base import BaseAIComponent
+    from ..factory import AIComponentFactory
+    from ..llm.llm_manager import BaseLLMManager
 
-class SubtaskStatus(str, enum.Enum):
+
+class SubtaskStatus(enum.StrEnum):
     """サブタスクの状態"""
-    PENDING = "pending"           # 待機中
-    BLOCKED = "blocked"           # ブロック中（依存関係）
-    IN_PROGRESS = "in_progress"   # 実行中
-    REVIEWING = "reviewing"       # レビュー中
-    REVISING = "revising"         # 修正中
-    COMPLETED = "completed"       # 完了
-    FAILED = "failed"             # 失敗
 
-class SessionStatus(str, enum.Enum):
+    PENDING = "pending"  # 待機中
+    BLOCKED = "blocked"  # ブロック中（依存関係）
+    IN_PROGRESS = "in_progress"  # 実行中
+    REVIEWING = "reviewing"  # レビュー中
+    REVISING = "revising"  # 修正中
+    COMPLETED = "completed"  # 完了
+    FAILED = "failed"  # 失敗
+
+
+class SessionStatus(enum.StrEnum):
     """セッションの状態を表す列挙型"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+
 # 構造化データ型
 class SubtaskDict(TypedDict):
     """サブタスク定義の辞書形式"""
+
     id: SubtaskID
     title: str
     description: str
-    dependencies: List[SubtaskID]
-    success_criteria: List[str]
-    tools: List[str]
+    dependencies: list[SubtaskID]
+    success_criteria: list[str]
+    tools: list[str]
+
 
 class SubtaskResultDict(TypedDict):
     """サブタスク実行結果の辞書形式"""
+
     subtask_id: SubtaskID
     status: SubtaskStatus
     result: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
+
 
 class TaskProgressDict(TypedDict):
     """タスク進捗状態の辞書形式"""
+
     status: TaskStatus
     progress: float
     current_phase: str
-    current_subtask: Optional[SubtaskID]
+    current_subtask: SubtaskID | None
     completed_subtasks: int
     total_subtasks: int
     started_at: str
-    estimated_completion: Optional[str]
+    estimated_completion: str | None
+
 
 class SubTask:
     """サブタスク"""
-    def __init__(self, id: str, title: str, description: str, **kwargs):
+
+    def __init__(self, id: str, title: str, description: str, **kwargs) -> None:
         self.id = id
         self.title = title
         self.description = description
@@ -79,94 +97,98 @@ class SubTask:
         self.requirements = kwargs.get("requirements", [])
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
-    
+
     def update_status(self, status: TaskStatus) -> None:
         """状態更新"""
         self.status = status
         self.updated_at = datetime.now()
 
+
 class Session:
     """セッション管理"""
-    def __init__(self, id: Optional[str] = None, **kwargs):
+
+    def __init__(self, id: str | None = None, **kwargs) -> None:
         self.id = id or f"session_{uuid.uuid4().hex}"
         self.title = kwargs.get("title", "")
         self.mode = kwargs.get("mode")
         self.requirements = kwargs.get("requirements", [])
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
-        self.subtasks: Dict[str, SubTask] = {}
+        self.subtasks: dict[str, SubTask] = {}
         self.components = {}
-    
+
     def add_subtask(self, task: SubTask) -> None:
         """サブタスク追加"""
         self.subtasks[task.id] = task
         self.updated_at = datetime.now()
-    
-    def get_subtask(self, task_id: str) -> Optional[SubTask]:
+
+    def get_subtask(self, task_id: str) -> SubTask | None:
         """サブタスク取得"""
         return self.subtasks.get(task_id)
-    
+
     def update_task_status(self, task_id: str, status: TaskStatus) -> None:
         """タスク状態更新"""
         task = self.get_subtask(task_id)
         if task:
             task.update_status(status)
             self.updated_at = datetime.now()
-    
+
     def get_component(self, component_type: str):
         """コンポーネント取得"""
         return self.components.get(component_type)
 
+
 class SessionManager:
     """セッションの永続化と管理を行うクラス（シングルトン）"""
-    _instance: Optional['SessionManager'] = None
+
+    _instance: Optional["SessionManager"] = None
 
     @classmethod
     def get_instance(
         cls,
-        storage_dir: Optional[str] = None, # オプショナルに変更
-        llm_manager: Optional['BaseLLMManager'] = None,
-        factory: Optional['AIComponentFactory'] = None
-    ) -> 'SessionManager':
+        storage_dir: str | None = None,  # オプショナルに変更
+        llm_manager: Optional["BaseLLMManager"] = None,
+        factory: Optional["AIComponentFactory"] = None,
+    ) -> "SessionManager":
         """シングルトンインスタンスを取得。初回のみ引数が必要。"""
         if cls._instance is None:
             if storage_dir is None or llm_manager is None or factory is None:
-                raise ValueError("SessionManager の初回初期化には storage_dir, llm_manager, factory が必要です")
+                raise ValueError(
+                    "SessionManager の初回初期化には storage_dir, llm_manager, factory が必要です"
+                )
             cls._instance = cls(storage_dir, llm_manager, factory)
         # 2回目以降は引数不要だが、設定を変えたい場合は再初期化が必要（非推奨）
         elif storage_dir is not None:
-             print("警告: SessionManager は既に初期化されています。storage_dir の変更は無視されます。")
+            print(
+                "警告: SessionManager は既に初期化されています。storage_dir の変更は無視されます。"
+            )
         return cls._instance
 
     def __init__(
-        self,
-        storage_dir: str,
-        llm_manager: 'BaseLLMManager',
-        factory: 'AIComponentFactory'
+        self, storage_dir: str, llm_manager: "BaseLLMManager", factory: "AIComponentFactory"
     ) -> None:
         """初期化（直接呼び出し非推奨）"""
         if SessionManager._instance is not None:
-             # raise Exception("SessionManager はシングルトンです。get_instance() を使用してください。")
-             # 既にインスタンスがある場合は何もしないか、警告を出す
-             print("警告: SessionManager は既にインスタンスが存在します。初期化をスキップします。")
-             return
+            # raise Exception("SessionManager はシングルトンです。get_instance() を使用してください。")
+            # 既にインスタンスがある場合は何もしないか、警告を出す
+            print("警告: SessionManager は既にインスタンスが存在します。初期化をスキップします。")
+            return
 
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        self.sessions: Dict[SessionID, Session] = {} # 型エイリアス使用
+        self.sessions: dict[SessionID, Session] = {}  # 型エイリアス使用
         self.llm_manager = llm_manager
         self.factory = factory
         self._load_sessions()
-        SessionManager._instance = self # シングルトンインスタンスを設定
+        SessionManager._instance = self  # シングルトンインスタンスを設定
         print(f"SessionManager を初期化しました。ストレージ: {self.storage_dir}")
-
 
     def create_session(
         self,
-        session_id: Optional[SessionID] = None,
-        mode: Optional[str] = None,
-        config: Optional[Dict[str, Any]] = None,
-        initial_tasks: Optional[List[SubTask]] = None
+        session_id: SessionID | None = None,
+        mode: str | None = None,
+        config: dict[str, Any] | None = None,
+        initial_tasks: list[SubTask] | None = None,
     ) -> Session:
         """新規セッションを作成"""
         # generate_id を使用
@@ -180,14 +202,14 @@ class SessionManager:
             factory=self.factory,
             config=config,
             mode=mode,
-            initial_tasks=initial_tasks
+            initial_tasks=initial_tasks,
         )
         self.sessions[sid] = session
-        self._save_session(session) # 作成時にも保存
+        self._save_session(session)  # 作成時にも保存
         print(f"新規セッション {sid} を作成し、保存しました。")
         return session
 
-    def get_session(self, session_id: SessionID) -> Optional[Session]:
+    def get_session(self, session_id: SessionID) -> Session | None:
         """セッションを取得 (メモリ -> ファイルの順で検索)"""
         if session_id in self.sessions:
             return self.sessions[session_id]
@@ -196,7 +218,7 @@ class SessionManager:
         session_path = self.storage_dir / f"{session_id}.json"
         if session_path.exists():
             print(f"セッション {session_id} がメモリにないため、ファイルからロードします。")
-            return self._load_session(session_path) # ロードして返す
+            return self._load_session(session_path)  # ロードして返す
         else:
             print(f"セッション {session_id} はメモリにもファイルにも存在しません。")
             return None
@@ -204,7 +226,9 @@ class SessionManager:
     def update_session(self, session: Session) -> None:
         """セッションを更新して保存"""
         if session.id not in self.sessions:
-             print(f"警告: 更新対象のセッション {session.id} がマネージャーに登録されていません。新規登録します。")
+            print(
+                f"警告: 更新対象のセッション {session.id} がマネージャーに登録されていません。新規登録します。"
+            )
         self.sessions[session.id] = session
         self._save_session(session)
         # print(f"セッション {session.id} を更新し、保存しました。") # save_session内でログが出るので不要かも
@@ -229,18 +253,18 @@ class SessionManager:
                 # ファイル削除失敗でもメモリから消えていれば True のままにするか？ -> Falseにする方が安全か
                 deleted = False
         elif not deleted:
-             print(f"削除対象のセッション {session_id} は見つかりませんでした。")
+            print(f"削除対象のセッション {session_id} は見つかりませんでした。")
 
         return deleted
 
-    def list_sessions(self) -> List[SessionID]:
+    def list_sessions(self) -> list[SessionID]:
         """存在するセッションIDのリストを取得 (メモリ + ファイル)"""
         memory_ids = set(self.sessions.keys())
         try:
-             file_ids = {p.stem for p in self.storage_dir.glob("*.json")}
+            file_ids = {p.stem for p in self.storage_dir.glob("*.json")}
         except FileNotFoundError:
-             print(f"警告: ストレージディレクトリ {self.storage_dir} が見つかりません。")
-             file_ids = set()
+            print(f"警告: ストレージディレクトリ {self.storage_dir} が見つかりません。")
+            file_ids = set()
 
         all_ids = sorted(list(memory_ids.union(file_ids)))
         # print(f"利用可能なセッションIDリスト: {all_ids}") # ログは get で十分かも
@@ -259,31 +283,30 @@ class SessionManager:
                     if loaded_session:
                         loaded_count += 1
                     else:
-                        failed_count +=1
+                        failed_count += 1
         except FileNotFoundError:
-             print(f"警告: ストレージディレクトリ {self.storage_dir} が見つかりません。ロードをスキップします。")
-             return
+            print(
+                f"警告: ストレージディレクトリ {self.storage_dir} が見つかりません。ロードをスキップします。"
+            )
+            return
         print(f"{loaded_count} 件のセッションをロードしました。{failed_count} 件は失敗。")
 
-
-    def _load_session(self, file_path: Path) -> Optional[Session]:
+    def _load_session(self, file_path: Path) -> Session | None:
         """JSONファイルからセッションを読み込む"""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 session_data = json.load(f)
-            
+
             # セッションを復元
             session = Session.from_dict(
-                data=session_data,
-                llm_manager=self.llm_manager,
-                factory=self.factory
+                data=session_data, llm_manager=self.llm_manager, factory=self.factory
             )
-            
+
             # メモリ上のセッション辞書に追加
             self.sessions[session.id] = session
             print(f"セッション {session.id} をファイル {file_path} から読み込みました。")
             return session
-            
+
         except ValidationError as e:
             print(f"エラー: セッションデータのバリデーションに失敗しました ({file_path}): {e}")
             return None
@@ -291,17 +314,16 @@ class SessionManager:
             print(f"エラー: セッションの読み込みに失敗しました ({file_path}): {e}")
             return None
 
-
     def _save_session(self, session: Session) -> None:
         """セッションの状態をJSONファイルに保存"""
         file_path = self.storage_dir / f"{session.id}.json"
         try:
             # Pydantic V2 スタイル: model_dump() を使用
             session_data = session.to_dict()  # to_dict()メソッドはすでにmodel_dump()を使用
-            
+
             # JSON文字列に変換して保存
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(session_data, f, indent=2, ensure_ascii=False)
             print(f"セッション {session.id} を {file_path} に保存しました。")
         except Exception as e:
-            print(f"エラー: セッション {session.id} の保存に失敗しました ({file_path}): {e}") 
+            print(f"エラー: セッション {session.id} の保存に失敗しました ({file_path}): {e}")
